@@ -29,16 +29,23 @@ The following software is required:
   * scales (version 1.3.0)
   * colorspace (version 2.1.0)
 # Data availablity
+## Required input files:
+Cell-line- and treatment-specific dynamic RNA sequencing data files :
+
+..... ERIC .....
 
 
 # RNA sequencing data processing 
-
+..... ERIC .....
 
 # Pathway activity score calculation
-
+..... ERIC .....
 
 # Generalized additive model (GAM) of dynamic phenotype change during treatment
 Dynamic changes in pathway activity during treatment were characterized in CDK4/6i-sensitive and -resistant cells using generalized additive models (GAM). Models integrated RNA data from across ribociclib-resistant and -sensitive cell states, over time and across individual and combined treatments. Temporal patterns of pathway activity were partitionaed into four components: i) pre-treatment differences between CDK4/6i-resistant and -sensitive cells, ii) initial response to treatment upon drug addition, iii) pathway reactivation/deactivation during treatment, and iv) plasticity in treatment response upon subsequent drug additions. Treatment effects of monotherapies were additively combined, yielding an additive expectation of the combination treatment effect. Deviation from the additive expectation quantified synergistic or antagonistic effects of combination therapy.
+
+An example rmarkdown document within this repository shows how to apply the GAM model (using required input files) to generate cell-line-specific results (components i-iv) for a representative pathway. See file ..... ERIC .....
+
 
 # Cancer population growth rate and trajectory analyses
 To assess the ability of mono- and combination-treatments to control cancer proliferation, we fluorescently labelled cell lines to track cancer population size over time in 3D spheroids. 
