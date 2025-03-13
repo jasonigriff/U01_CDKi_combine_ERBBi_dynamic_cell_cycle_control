@@ -31,9 +31,7 @@ The following software is required:
   * scales (version 1.3.0)
   * colorspace (version 2.1.0)
 
-## Data generation and availablity
-
-## RNA sequencing data processing 
+## RNA sequencing data processing and availablity
 ### Required input files:
 
 ..... ERIC .....
