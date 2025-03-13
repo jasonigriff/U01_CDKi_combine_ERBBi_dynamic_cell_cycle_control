@@ -11,6 +11,7 @@ Griffiths, J. I., Chen, J., Cosgrove, P. A., O’Dea, A., Sharma, P., Ma, C., ..
 
 Griffiths, J. I., Cosgrove, P. A., Medina, E. F., Nath, A., Chen, J., Adler, F. R., ... & Bild, A. H. (2025). Cellular interactions within the immune microenvironment underpins resistance to cell cycle inhibition in breast cancers. Nature Communications, 16(1), 2132.https://www.nature.com/articles/s41467-025-56279-x
 
+
 ## Environment set up
 The following software is required:
 
@@ -31,6 +32,7 @@ The following software is required:
   * scales (version 1.3.0)
   * colorspace (version 2.1.0)
 
+
 ## RNA sequencing data processing and availablity
 ### Required input files:
 
@@ -44,6 +46,7 @@ Processed expresion data (CPM) including metadata columns (treatment, timepoint,
 "sh11141_CAMA1_genes_gam_short.term_inputData_synergy.csv"
 .....      .....
 
+
 ## Pathway activity score calculation
 ..... ERIC .....
 Describe generation of pathway data from GEO input data: name of script
@@ -52,6 +55,7 @@ Processed temporal pathway activity data, required to model phenotypic change du
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_inputData_synergy.xlsx"
 "sh11141_CAMA1_H.C2.C5.C6_gam_short.term_inputData_synergy.xlsx"
 .....      .....
+
 
 ## Generalized additive model (GAM) of dynamic phenotype change during treatment
 Dynamic changes in pathway activity during treatment were characterized in CDK4/6i-sensitive and -resistant cells using generalized additive models (GAM). Models integrated RNA data from across ribociclib-resistant and -sensitive cell states, over time and across individual and combined treatments. Temporal patterns of pathway activity were partitionaed into four components: i) pre-treatment differences between CDK4/6i-resistant and -sensitive cells, ii) initial response to treatment upon drug addition, iii) pathway reactivation/deactivation during treatment, and iv) plasticity in treatment response upon subsequent drug additions. Treatment effects of monotherapies were additively combined, yielding an additive expectation of the combination treatment effect. Deviation from the additive expectation quantified synergistic or antagonistic effects of combination therapy.
@@ -75,10 +79,6 @@ In these model outputs, comparison between CDK4/6i-resistant and -sensitive cell
 .....      .....
 
 
-
-
-
-
 ## Cancer population growth rate and trajectory analyses
 To assess the ability of mono- and combination-treatments to control cancer proliferation, we fluorescently labelled cell lines to track cancer population size over time in 3D spheroids and from this quantified cancer cell abundance over time. 
 
@@ -90,3 +90,11 @@ The speed of growth or shrinkage of each replicate cancer population over the ex
 ## Western blot protein quantification 
 Immunoblotting was applied to test GAM model predicted CDK4/6i (ribociclib) and ERBBi (afatinib) induced protein level and phosphorylation changes. Replicate experiments were performed and western blot bands were quantified using imageJ.
 
+
+# Performing analyses using scripts in the "Source code" folder
+The above mentioned input data should be accessed via the manuscript source data folder (along with Raw data at GEO GSE284956). 
+Code in the "Source code" folder of this repository perform analyses presented in the manuscript. Code is partitioned into separate scripts which perform an analysis relating to specific manuscript figures. Script names begin with a string indicating the figures that they relate to.
+
+Modify the file path specified at the start of each script (fileloc) to align with the location of the source data folder on your system. Ensure the path correctly leads to the folder containing the required input file by verifying it with file.exists(#filepath#). The necessary packages are listed at the beginning of each script and must be installed beforehand. Additionally, the code for saving output is currently commented out, so users should specify appropriate output file locations as needed.
+
+The scripts can be executed in any order, as the provided input data is sufficient for analysis. However, the supplementary figures were produced as part of the workflow described in the manuscript and support its findings. As a result, these analyses remain embedded within the code for the main figures.
