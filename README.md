@@ -91,7 +91,7 @@ In these model outputs, comparison between CDK4/6i-resistant and -sensitive cell
 ## Cancer population growth rate and trajectory analyses
 To assess the ability of mono- and combination-treatments to control cancer proliferation, we fluorescently labelled cell lines to track cancer population size over time in 3D spheroids and from this quantified cancer cell abundance over time. 
 
-The individual and combined effects of CDK4/6i and ERBBoi on the cancer growth trajectory of each cell line over time was characterized using a Gaussian process (GP) model. The model quantified treatment impacts across time, with 95% confidence intervals highlighting timepoints where cancer population dynamics diverged between treatment conditions. 
+The individual and combined effects of CDK4/6i and ERBBi on the cancer growth trajectory of each cell line over time was characterized using a Gaussian process (GP) model. The model quantified treatment impacts across time, with 95% confidence intervals highlighting timepoints where cancer population dynamics diverged between treatment conditions. 
 
 The speed of growth or shrinkage of each replicate cancer population over the experiment was quantified using relative growth rate (rgr). Statistical significance of synergy effects on cancer growth rates was tested using a linear mixed effects model (lme). This partition main treatment effects, to define the additive expectation (under the BLISS synergy model) and included an interaction term to quantify synergy by measuring deviation of combination-treated cancer growth rates from this additive expectation. The random effects component accounted for cell line specific growth rate differences.
 
