@@ -2,7 +2,12 @@
 ## Introduction
 This repository contains code accompanying the project: "Combination CDK4/6 and ErbB inhibition induces cell cycle arrest and apoptosis in ribociclib-resistant estrogen receptor-positive (ER+) breast cancer". 
 
-It provides code used to analyze the dynamic transcriptional RNA sequencing data of CDK4/6 inhibitor-resistant and -sensitive ER+ breast cell cell lines during individual or combined treatment with CDK4/6i (ribociclib) or ERBBi (afatinib).
+It provides code used to:
+
+* preprocess raw RNA sequencing data.
+* calculate pathway activity using gene set enrighment.
+* analyze  dynamic transcriptional RNA sequencing changes of CDK4/6 inhibitor-resistant and -sensitive ER+ breast cell cell lines during individual or combined treatment with CDK4/6i (ribociclib) or ERBBi (afatinib). 
+* quantify the trajectories of cancer spheroid growth across treatments and assess synergistice combination treatment effects on cancer growth.
 
 
 Related publications (Please consult and cite accordingly when using this repository):
@@ -39,7 +44,7 @@ Ribociclib-resistant cell lines were established through experimental evolution,
 ## RNA sequencing
 Cell-line- and treatment-specific dynamic RNA sequencing datasets were generated using temporal bulk RNA sequencing. Sequencing was performed by Fulgent Genetics following QC on 180 samples. Libraries were prepared using the Illumina TruSeq Stranded mRNA kit and sequenced on a NovaSeq 6000 at ~20M paired-end reads per sample. Kallisto was used for fast, memory-efficient pseudoalignment of Fastq reads to the Gencode v43 transcriptome (GRCh38). Raw counts were merged into a matrix for filtering and normalization. Fastq files for MCF-7 and CAMA-1 were processed separately.
 
-## Data processing and source data availablity
+## Data processing and availablity
 ..... ERIC .....
 Describe raw data processing: name of script
 
