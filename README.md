@@ -1,6 +1,6 @@
 # U01_CDKi_combine_ERBBi_dynamic_cell_cycle_control
 ## Introduction
-This repository contains code accompanying the project: "Combination CDK4/6 and ErbB inhibition induces cell cycle arrest and apoptosis in ribociclib-resistant estrogen receptor-positive (ER+) breast cancer". 
+This repository contains code accompanying the study entitled: "Combination CDK4/6 and ErbB inhibition induces cell cycle arrest and apoptosis in ribociclib-resistant estrogen receptor-positive (ER+) breast cancer". 
 
 It provides code used to:
 
@@ -39,31 +39,35 @@ The following software is required:
 
 
 ## Experiment data generation summary
-Ribociclib-resistant cell lines were established through experimental evolution, by culturing parental CAMA-1 and MCF-7 cell lines under ribociclib treatment for 6 and 12 months, respectively. Three-dimensional spheroid cultured CAMA-1 and MCF-7 ribociclib-sensitive and -resistant breast cancer cell lines were treated with DMSO (control), ribociclib, afatinib, or a combination of ribociclib and afatinib for 21 days with media and drug replacement every 3 days (Figure 1A). Cells were lentivirus-labeled to express a fluorescent protein and image fluorescence intensity measurements were captured every 3 days, enabling cancer abundance monitoring during treatments. Cells were harvested for bulk RNA-seq every 6 days at 0, 6, and 24 hours following media and drug replacement. This provided transcriptomic time courses for cell lines across treatments to uncover the molecular differences between ribociclib-sensitive and -resistant cancer cells that were acquired during experimental evolution and their differing phenotypic responses to therapy at short (hours after adding or refreshing drug) and long (days under treatment) timescales. 
+CDK4/6i-resistant estrogen receptor-positive (ER+) breast cancer cell lines were established through experimental evolution, by culturing parental CAMA-1 and MCF-7 cell lines under CDK4/6 inhibition (ribociclib) treatment for 6 and 12 months, respectively. Three-dimensional spheroid cultured CAMA-1 and MCF-7 CDK4/6i-sensitive and -resistant cell lines were treated with DMSO (control), ribociclib, afatinib (ERBBi), or a combination of ribociclib and afatinib for 21 days with media and drug replacement every 3 days (Figure 1A). Cancer cell abundance was monitoring every 3 days during treatments and viability (ATP) measured post treatment. Cells were harvested for bulk RNA-seq every 6 days at 0, 6, and 24 hours following media and drug replacement. This provided transcriptomic time courses for cell lines across treatments to uncover the molecular differences between CDK4/6i-sensitive and -resistant cancer cells that were acquired during experimental evolution and their differing phenotypic responses to therapy at short (hours after adding or refreshing drug) and long (days under treatment) timescales. 
 
-## RNA sequencing
-Cell-line- and treatment-specific dynamic RNA sequencing datasets were generated using temporal bulk RNA sequencing. Sequencing was performed by Fulgent Genetics following QC on 180 samples. Libraries were prepared using the Illumina TruSeq Stranded mRNA kit and sequenced on a NovaSeq 6000 at ~20M paired-end reads per sample. Kallisto was used for fast, memory-efficient pseudoalignment of Fastq reads to the Gencode v43 transcriptome (GRCh38). Raw counts were merged into a matrix for filtering and normalization. Fastq files for MCF-7 and CAMA-1 were processed separately.
+## RNA sequencing and processing
+Cell-line- and treatment-specific dynamic RNA sequencing datasets were generated using temporal bulk RNA sequencing (180 samples). Libraries were prepared (Illumina TruSeq Stranded mRNA kit) and sequenced (NovaSeq 6000) and then aligned, using Kallisto for fast, memory-efficient pseudoalignment of Fastq reads to the Gencode v43 transcriptome (GRCh38). Raw counts were merged into a matrix for filtering and normalization. Fastq files for MCF-7 and CAMA-1 were processed separately.
 
-## Data processing and availablity
 ..... ERIC .....
 Describe raw data processing: name of script
+.....      .....
 
+## Data availablity
 Gene expresion count matrices are available through Gene Expression Omnibus under accession code GSE284956.
 
-Processed expresion data (CPM) including metadata columns (treatment, timepoint, cell line, resitance state, day, hour) are provided as source data:
+..... ERIC .....
+Describe processing to get from GEO data to the input for GAM model
+.....      .....
+
+Processed expresion data (CPM) including metadata columns (treatment, timepoint, cell line, resitance state, day, hour) are provided as source data files:
 "sh10050_MCF7_genes_gam_short.term_inputData_synergy.csv"
 "sh11141_CAMA1_genes_gam_short.term_inputData_synergy.csv"
-.....      .....
 
 
 ## Pathway activity score calculation
 ..... ERIC .....
 Describe generation of pathway data from GEO input data: name of script
+.....      .....
 
-Processed temporal pathway activity data, required to model phenotypic change during combination CDK4/6i+ERBBi, are provided as source data: 
+Processed temporal pathway activity data, required to model phenotypic change during combination CDK4/6i+ERBBi, are provided as source data files: 
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_inputData_synergy.xlsx"
 "sh11141_CAMA1_H.C2.C5.C6_gam_short.term_inputData_synergy.xlsx"
-.....      .....
 
 
 ## Generalized additive model (GAM) of dynamic phenotype change during treatment
@@ -71,6 +75,7 @@ Dynamic changes in pathway activity during treatment were characterized in CDK4/
 
 ..... ERIC .....
 An example rmarkdown document within this repository shows how the GAM model can be applied (using processed temporal pathway activity data) to generate cell-line-specific results (components i-iv) for a representative pathway. See file the html version in this repository (name of file)
+.....      .....
 
 For each pathway, statistical summaries of the significance of fitted GAM model parametric terms (components i-iii) and treatment synergy effects were generated for each cell line and provided as source data files:    
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_parametric_table_synergy.xlsx"
@@ -85,7 +90,6 @@ In these model outputs, comparison between CDK4/6i-resistant and -sensitive cell
 "sh10050_CAMA1_H.C2.C5.C6_gam_short.term_parametric_table_synergy.txt"
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_smooths_table_synergy.txt"
 "sh10050_CAMA1_H.C2.C5.C6_gam_short.term_smooths_table_synergy.txt"
-.....      .....
 
 
 ## Cancer population growth rate and trajectory analyses
