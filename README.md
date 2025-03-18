@@ -44,7 +44,7 @@ CDK4/6i-resistant estrogen receptor-positive (ER+) breast cancer cell lines were
 ## RNA sequencing and processing
 Cell-line- and treatment-specific dynamic RNA sequencing datasets were generated using temporal bulk RNA sequencing (180 samples). Libraries were prepared (Illumina TruSeq Stranded mRNA kit) and sequenced (NovaSeq 6000) and then aligned, using Kallisto for fast, memory-efficient pseudoalignment of Fastq reads to the Gencode v43 transcriptome (GRCh38). Raw counts were merged into a matrix for filtering and normalization. Fastq files for MCF-7 and CAMA-1 were processed separately.
 
-..... ERIC .....
+..... ERIC ..... I can edit now
 Describe raw data processing: name of script
 .....      .....
 
