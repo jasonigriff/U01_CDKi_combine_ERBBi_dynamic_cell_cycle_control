@@ -1,0 +1,731 @@
+---
+title: "sh11141 cama1 rna seq"
+author: "Eric Medina"
+date: "2023-06-21"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(edgeR)
+library(patchwork)
+library(data.table)
+library(ggplot2)
+library(annotables)
+library(RColorBrewer)
+library(conflicted)
+library(tidyverse)
+
+#CONFLICTS
+conflict_prefer_all("dplyr", quiet = T)
+
+#Main dir
+dir <- "~/u01_rna.seq/sh11141/"
+
+#Strings
+c.line <- "CAMA1"
+batch <- "sh11141"
+```
+
+```{r}
+#SET SEED
+set.seed(0310)
+
+#IMPORT COUNTS AND FILTER GENES TO MATCH GRCH38
+setwd(paste0(dir, "merged_counts/"))
+counts <- read_tsv(file = "SH11141.merged.counts.tsv", quote = "")
+dim(counts)
+head(counts)[,1:5]
+
+#Get genes with multiple Gene_Symbols (multiple transcripts)
+en_ids <- counts %>%
+  as.data.frame() %>%
+  dplyr::select(Gene_Symbol) %>%
+  group_by(Gene_Symbol) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count)) %>% 
+  filter(count > 1) %>% 
+  pull(Gene_Symbol) %>% 
+  as.character()
+
+#Keep gene symbols
+counts1 <- counts %>% 
+  select(-c(EN_T, EN_G))
+
+#Remove duplicate genes, store unique genes (will merge later)
+counts1.1 <- counts1 %>% 
+  filter(!Gene_Symbol %in% en_ids)
+
+#Filter for duplicated genes to condense transcripts
+counts1.2 <- counts1 %>% 
+  filter(Gene_Symbol %in% en_ids)
+
+#For loop to combine counts for duplicated gene symbols (Transcripts)
+## (Kallistro output was estimated per transcript)
+#i <- "Y_RNA"
+#x <- sample(en_ids, 4)
+tmp1 <- list()
+start <- Sys.time()
+for (i in en_ids) {
+#for (i in x) {
+  print(i)
+  tmp <- counts1.2 %>% 
+    as.data.frame() %>% 
+    filter(Gene_Symbol == i) %>% 
+    select(-Gene_Symbol) %>% 
+    colSums() %>% 
+    as.data.frame() %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    mutate(Gene_Symbol = i, .before = colnames(.)[1]) %>% 
+    remove_rownames()
+  
+  tmp1[[i]] <- tmp
+    
+}
+end <- Sys.time()
+merg.time <- end - start
+print(merg.time)
+
+#merge list into one dataframe
+x2 <- plyr::ldply(tmp1, data.frame, .id = NULL)
+
+colnames(x2) <- colnames(counts1.2)
+
+#Merge with counts with unique names
+counts2 <- counts1.1 %>% 
+  full_join(x2)
+
+#.f = function() {
+#save condensed counts
+setwd(dir = paste0(dir, "counts/filtered"))
+write.table(counts2, file = "sh11141_dup.transcripts_combined_counts.txt",
+              sep = "\t", col.names = T, row.names = F, quote = F)
+#}
+
+#Insert entrezID, filter NAs, match to counts
+
+#Get filtered gene symbols
+g.tmp <- counts2 %>%
+  select(Gene_Symbol) %>% 
+  as.data.frame()
+
+#remove gene symbols with "ENS"
+g.tmp1 <- g.tmp[grepl("ENS", g.tmp$Gene_Symbol),]
+g <- g.tmp %>% 
+  filter(!Gene_Symbol %in% g.tmp1)
+dim(g)
+head(g, 10)
+
+#Look at known genes from grch38
+head(grch38,10)
+
+#Get known gene symbols from grch38
+annot <- grch38 %>%
+  as.matrix() %>% 
+  as.data.frame() %>%
+  dplyr::rename("Gene_Symbol" = "symbol",
+                "ENTREZID" = "entrez",
+                "ENZGENE" = "ensgene")
+dim(annot)
+head(annot, 10)
+
+#Match gene symbols from grch38 to filtered gene symbols
+annot2 <- annot[match(g$Gene_Symbol, annot$Gene_Symbol),]
+dim(annot2)
+head(annot2, 10)
+
+#Remove NAs
+sum(is.na(annot2))
+annot3 <- na.omit(annot2)
+sum(is.na(annot3))
+
+dim(annot3)
+dim(counts2)
+
+#Only keep gene symbols in grch38
+counts2.1 <- counts2 %>%
+  dplyr::filter(Gene_Symbol %in% annot3$Gene_Symbol) %>%
+  column_to_rownames(var = "Gene_Symbol")
+dim(counts2.1)
+sum(is.na(counts2.1))
+
+#CHANGE CODED NAMES IN COUNTS USING KIMYA'S DECODER 
+decoder <- openxlsx::read.xlsx(paste0(dir, "sh11141_sample_decoder.xlsx"))
+
+#Clean up names
+decoder1 <- decoder %>%
+  as.data.frame() %>%
+  mutate(Cell.Type2 = Cell.Type,
+         Cell.Type2 = gsub("-", "", Cell.Type2)) %>%
+  #there were spaces at the end of some of the strings, needed to trim.
+  mutate_at(vars(Cell.Type2), str_trim) %>%
+  mutate(Cell.Type2 = gsub(" ", "_", Cell.Type2),
+         Cell.Type3 = 
+           ifelse(Cell.Type2 == paste0(c.line, "_Sensitive"), 
+                  paste0(c.line, "_Sen"), paste0(c.line, "_RiboR")),
+         Treatment = 
+           ifelse(Condition == "Afatinib", "Afat",
+                  ifelse(Condition == "Combo", "Comb",
+                         ifelse(Condition == "DMSO", "DMSO",
+                                       ifelse(Condition == "Ribociclib",
+                                              "Ribo", ""))))) %>%
+  mutate(Time2 = gsub(" ", "_", Time),
+         Time2 = gsub("Day", "D", Time2),
+         Time2 = gsub("Hr", "H", Time2),
+         Time2 = gsub("_", "", Time2)) %>%
+  unite(Cell.Type4, c(Cell.Type3, Treatment, Time2), sep = "_", remove = F) %>%
+  separate(Cell.Type3, 
+           into = c("CellLine", "State"),
+           remove = F) %>%
+  mutate(Hour = ifelse(Time2 == "D0H0", 0,
+                ifelse(Time2 == "D0H6", 6,
+                ifelse(Time2 == "D0H24", 24,
+                ifelse(Time2 == "D6H0", 144,
+                ifelse(Time2 == "D6H6", 150,
+                ifelse(Time2 == "D6H24", 168,
+                ifelse(Time2 == "D12H0", 288,
+                ifelse(Time2 == "D12H6", 294,
+                ifelse(Time2 == "D12H24", 312,
+                ifelse(Time2 == "D18H0", 432,
+                ifelse(Time2 == "D18H6", 438,
+                ifelse(Time2 == "D18H24", 456, ""))))))))))))) %>% 
+  unite("S_T", c(State, Treatment), sep = "_", remove = F) %>% 
+  unite("S_T_T", c(S_T, Time2), sep = "_", remove = F) %>% 
+  unite("S_T_H", c(S_T, Hour), sep = "_", remove = F) %>% 
+  unite("Cell.Type5", c(Cell.Type3, Treatment, Hour), sep = "_", remove = F) %>% 
+  mutate(Day = ifelse(Hour %in% c(0, 6, 24), 1, 
+               ifelse(Hour %in% c(144, 150, 168), 6,
+               ifelse(Hour %in% c(288, 294, 312), 12,
+               ifelse(Hour %in% c(432, 438, 456), 18, "")))),
+        timeunderdrug = ifelse(Hour %in% c(0, 144, 288, 432), 0, 
+                        ifelse(Hour %in% c(6, 150, 294, 438), 6,
+                        ifelse(Hour %in% c(24, 168, 312, 456), 24, "")))) %>% 
+  select(Cell.Type5, Cell.Type4, Cell.Type3, CellLine, S_T_H, S_T_T,
+         S_T, State, Treatment, Time2, Hour, Day, timeunderdrug,
+         counts.names, Sample.ID) %>% 
+  as.data.frame()
+
+#Which need to be duplicated?
+table(decoder1$Time2, decoder1$Cell.Type3, decoder1$Treatment)
+
+# Sample with ID = 2_CAMA1_Ribo_Afat is CAMA1_RiboR_DMSO_D0H0. Needs to 
+## be duplicated into other three drug conditions
+
+#Duplicate rows
+
+decoder1.1 <- decoder1 %>% 
+  filter(Sample.ID == "2_CAMA1_Ribo_Afat") #%>% 
+  #slice(rep(1:n(), each = 4))
+
+#Change to other drug treatments
+
+#Afat
+decoder1.2 <- decoder1.1 %>% 
+  str_replace_all(pattern = "DMSO", "Afat") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder1.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "A") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_") 
+
+#Ribo
+decoder1.3 <- decoder1.1 %>% 
+  str_replace_all(pattern = "DMSO", "Ribo") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder1.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "R") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_")
+
+#Comb
+decoder1.4 <- decoder1.1 %>% 
+  str_replace_all(pattern = "DMSO", "Comb") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder1.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "C") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_")
+
+decoder1.1 <- decoder1.1 %>% 
+  #slice_head(n = 1) %>% 
+  full_join(decoder1.2) %>% 
+  full_join(decoder1.3) %>% 
+  full_join(decoder1.4)
+
+# Sample with ID = 1_CAMA1_Ribo_Afat is CAMA1_Sen_Comb_D0H0. Needs to 
+## be duplicated into other three drug conditions
+
+#Duplicate rows
+
+decoder2.1 <- decoder1 %>% 
+  filter(Sample.ID == "1_CAMA1_Ribo_Afat") #%>% 
+  #slice(rep(1:n(), each = 4))
+
+#Change to other drug treatments
+
+#Afat
+decoder2.2 <- decoder2.1 %>% 
+  str_replace_all(pattern = "Comb", "Afat") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder2.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "A") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_")
+
+#Ribo
+decoder2.3 <- decoder2.1 %>% 
+  str_replace_all(pattern = "Comb", "Ribo") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder2.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "R") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_")
+
+#Comb
+decoder2.4 <- decoder2.1 %>% 
+  str_replace_all(pattern = "Comb", "DMSO") %>% 
+  as.data.frame() %>% 
+  rename("values" = ".") %>% 
+  mutate(names = colnames(decoder2.1)) %>% 
+  pivot_wider(names_from = "names", values_from = "values") %>% 
+  mutate(d = "D") %>% 
+  unite(counts.names, c(counts.names, d), sep = "_")
+
+decoder2.1 <- decoder2.1 %>% 
+  #slice_head(n = 1) %>% 
+  full_join(decoder2.2) %>% 
+  full_join(decoder2.3) %>% 
+  full_join(decoder2.4)
+
+decoder3 <- decoder1.1 %>% 
+  full_join(decoder2.1)
+
+decoder4 <- decoder1 %>% 
+  filter(!Sample.ID %in% unique(decoder3$Sample.ID)) %>% 
+  full_join(decoder3) %>%
+  mutate_at(vars(Cell.Type5, Cell.Type4, Cell.Type3, CellLine, S_T_H, S_T_T,
+                 S_T, State, Treatment, Time2, timeunderdrug), as.factor) %>% 
+  mutate_at(vars(timeunderdrug), as.factor) %>% 
+  mutate_at(vars(Hour), as.integer) %>% 
+  arrange(counts.names) 
+
+#Add names in counts to match decoder df, add missing sample drug treatments
+counts2.2 <- counts2.1 %>% 
+  mutate(SA226086_A = SA226086,
+         SA226086_R = SA226086,
+         SA226086_D = SA226086,
+         SA226087_A = SA226087,
+         SA226087_R = SA226087,
+         SA226087_C = SA226087)
+
+#Rearrange order of decoder to match order of column names in counts
+counts2.2 <- counts2.2[,match(decoder4$counts.names, colnames(counts2.2))]
+
+#Confirm names in counts match new decoder
+if (all(decoder4$counts.names == colnames(counts2.2))) {
+  print("Names match. proceed to change names")
+  #REPLACE CODED NAMES IN COUNTS
+colnames(counts2.2) <- decoder4$Cell.Type5
+} else {
+  print("Names do not match")
+}
+
+#USE EDGER TO NORMALIZE AND FILTER COUNTS
+
+#Determine group size for each sample
+## Here used the numbering system from Kimya's decoder for group
+
+#Create edgeR object
+y <- DGEList(counts = counts2.2, group = rep(1:96, each = 1), genes = annot3)
+y
+
+if (all(decoder4$Cell.Type5 == rownames(y$samples))) {
+  
+  print("sample names match, proceed to insert other variables")
+  #Insert varibles in object
+  y$samples$lib.size <- colSums(y$counts)
+  y$samples$CellLine <- decoder4$CellLine
+  y$samples$Cell.Type5 <- decoder4$Cell.Type5
+  y$samples$Cell.Type4 <- decoder4$Cell.Type4
+  y$samples$Cell.Type3 <- decoder4$Cell.Type3
+  y$samples$State <- decoder4$State
+  y$samples$Treatment <- decoder4$Treatment
+  y$samples$Time2 <- decoder4$Time2
+  y$samples$Hour <- decoder4$Hour
+  y$samples$S_T <- decoder4$S_T
+  y$samples$S_T_T <- decoder4$S_T_T
+  y$samples$S_T_H <- decoder4$S_T_H
+} else {
+    print("sample names do not match")
+}
+
+#Relevel/order
+y$samples$State <- relevel(y$samples$State, ref = "Sen")
+#y$samples$Treatment <- relevel(y$samples$Treatment, ref = "NT")
+
+y$samples$Treatment <- relevel(y$samples$Treatment, ref = "DMSO")
+#y$samples$Treatment <- ordered(y$samples$Treatment,
+#                               levels = c("DMSO", "Afat", "Ribo", "Comb"))
+y$samples$Time2 <- ordered(y$samples$Time2,
+                          levels = c("D0H0", "D0H6", "D0H24",
+                                     "D6H0", "D6H6", "D6H24", 
+                                     "D12H0", "D12H6", "D12H24",
+                                     "D18H0", "D18H6", "D18H24"))
+y$samples$Hour <- ordered(y$samples$Hour,
+                          levels = c("0", "6", "24",
+                                     "144", "150", "168", 
+                                     "288", "294", "312",
+                                     "432", "438", "456"))
+y$samples$S_T <- ordered(y$samples$S_T,
+                          levels = c("Sen_DMSO", "Sen_Afat", 
+                                     "Sen_Ribo", "Sen_Comb",
+                                     "RiboR_DMSO", "RiboR_Afat", 
+                                     "RiboR_Ribo", "RiboR_Comb"))
+
+
+head(data.frame(Sample=colnames(y),y$samples$group, 
+                y$samples$Cell.Type5, y$samples$State, 
+                y$samples$Treatment, y$samples$Hour))
+
+#For graphs: Use logCPM for exploratory plots.
+##calculate mean and median cpm cutoffs
+# Any two read counts with same CPM values will also have same logCPM values.
+## Prior count avoids taking log of zero, and reduces spurious variability
+## for genes with low counts -> shrinks all inter-sample logFC-changes towards
+## zero.
+#Convert to log2-CPM. log = T will add offset to CPM values before converting
+## to log2-scale. Offset is 2/L; 2 = prior counts, L = average lib size in mill.
+## logCPM values related to CPM values by log2(CPM + 2/L). 
+
+L <- mean(y$samples$lib.size) * 1e-6 #average lib size here is ~ 21 million
+M <- median(y$samples$lib.size) * 1e-6
+c(L, M)
+#Minimum number of genes kept in filtering = 10 in minimum number of samples
+## (minimum number of samples based on grouping factor)
+lcpm.cutoff <- log2(10/M + 2/L) 
+nsamples <- ncol(y)
+
+#expand color palette
+col <- colorRampPalette(brewer.pal(9, "Set1"))
+
+#Look at Unfiltered logCPM
+lcpm.unfilt <- cpm(y, log = T) #log2(cpm + 2/L)
+#added to cpm before log2: 2^logcpm - cpm = d; d + cpm = log2(cpm)
+cpm.unfilt <- cpm(y, log = F)
+counts.unfilt <- y$counts
+dim(lcpm.unfilt)
+r.lcpm.unf <- nrow(lcpm.unfilt)
+
+#Extra QC plots of unfiltered data
+#.f = function() {
+summary(lcpm.unfilt)
+
+setwd(dir = paste0(dir, "counts/unfiltered/figures/"))
+
+pdf(file = "sh11141_QC_logCPM_unfiltered_boxplot.pdf")
+boxplot(lcpm.unfilt, col = col(nsamples))
+title(main="A. Raw data", xlab="Log-cpm")
+dev.off()
+
+pdf(file = paste("sh11141_QC_logCPM_unfiltered", r.lcpm.unf,
+                 "distribution_test.pdf", sep = "_"), width = 9, height = 6)
+plot(density(lcpm.unfilt[,1]), col=col(nsamples), lwd=2, ylim=c(0,0.26), 
+     las=2, main="", xlab="")
+title(main="Unfiltered data", xlab="Log2CPM")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm.unfilt[,i])
+lines(den$x, den$y, col=col(nsamples)[i], lwd=2)
+ }
+snames <- rownames(y$samples)
+graphics::legend("topright", snames, text.col=col(nsamples), bty="n", cex = .6)
+dev.off()
+
+
+pdf(file = paste("sh11141_QC_unfiltered", r.lcpm.unf, 
+                 "gene_expression__MDS_plot.pdf", sep = "_"), 
+    width = 9, height = 6)
+plotMDS(lcpm.unfilt, cex = 0.7, dim.plot = c(1,2))
+title(main="Average (root-mean-square) of largest logFC changes")
+dev.off()
+
+#}
+
+#.f = function() {
+setwd(paste0(dir, "counts/unfiltered/"))
+
+# Save logCPM unfiltered values
+write.table(lcpm.unfilt, file = paste("sh11141_logCPM.unfiltered",
+                                      r.lcpm.unf ,"genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = T, quote = F)
+# Save CPM unfiltered values
+write.table(cpm.unfilt, file = paste("sh11141_CPM.unfiltered",
+                                     r.lcpm.unf ,"genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = T, quote = F)
+# Save counts unfiltered values
+write.table(counts.unfilt, file = paste("sh11141_counts.unfiltered",
+                                        r.lcpm.unf ,"genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = T, quote = F)
+#}
+
+#Make DF for summary statistics
+#Get mean and variance
+summ <- counts.unfilt %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "Gene_Symbol") %>% 
+  pivot_longer(!Gene_Symbol, names_to = "Cell.ID", values_to = "lcpm") %>% 
+  group_by(Gene_Symbol) %>% 
+  summarise(mean = mean(lcpm),
+            sd = sd(lcpm),
+            var = var(lcpm))
+plot(x = summ$mean, y = summ$var)
+
+
+#ggplot mean vs variance in log2
+
+setwd(dir = paste0(dir, "counts/unfiltered/figures/"))
+pdf(file = paste("sh11141_mean_vs_variance_counts_unfiltered.pdf", sep = "_"),
+    width = 7, height = 5)
+ggplot(summ, mapping = aes(x = log(mean,base = 2), y = log(var,base = 2))) +
+  geom_point() +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs")) +
+  theme_classic() +
+  labs(title = "log2 CPM Mean vs Variance unfiltered")
+dev.off()
+
+#FILER EDGER OBJECT FOR LOW EXPRESSED GENES
+dim(y)
+keep <- filterByExpr(y, group = y$samples$State)
+table(keep)
+y1 <- y[keep, , keep.lib.sizes = F]
+dim(y1)
+
+#TMM library normalization
+y1 <- calcNormFactors(y1, method = "TMM")
+
+#Look at filtered logCPM
+lcpm.filt <- cpm(y1, log = T)
+cpm.filt <- cpm(y1, log = F)
+counts.filt <- y1$counts
+r.lcpm.filt <- nrow(lcpm.filt)
+r.lcpm.filt
+
+#.f = function() {
+setwd(dir = paste0(dir, "counts/filtered/"))
+
+# SAVE FILTERED LOG2CPM
+tmp <- lcpm.filt %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene")
+write.table(tmp, file = paste("sh11141_logCPM_filtered_normalized",
+                                    r.lcpm.filt, "genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = F, quote = F)
+
+tmp <- cpm.filt %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene")
+
+# SAVE FILTERED CPM
+write.table(tmp, file = paste("sh11141_CPM_filtered_normalized",
+                                   r.lcpm.filt, "genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = T, quote = F)
+
+tmp <- counts.filt %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "gene")
+# SAVE FILTERED COUNTS
+write.table(tmp, file = paste("sh11141_counts_filtered_normalized",
+                                      r.lcpm.filt, "genes.txt", sep = "_"),
+            sep = "\t", col.names = T, row.names = T, quote = F)
+
+#}
+
+#Extra QC plots of filtered data
+
+#.f = function() {
+summary(lcpm.filt)
+#boxplot(log2(counts.filt), col = col(nsamples))
+
+setwd(dir = paste0(dir , "counts/filtered/figures/"))
+
+pdf(file = "sh11141_QC_logCPM_filtered_boxplot.pdf")
+boxplot(lcpm.filt, col = col(nsamples))
+title(main="A. Filtered data", xlab="Log-cpm")
+dev.off()
+
+L <- mean(y1$samples$lib.size) * 1e-6 
+M <- median(y1$samples$lib.size) * 1e-6
+c(L, M)
+lcpm.cutoff <- log2(10/M + 2/L)
+
+#Plot filtered library
+pdf(file = paste("sh11141_QC_filtered", r.lcpm.filt,
+                 "distribution.pdf", sep = "_"), width = 9, height = 6)
+plot(density(lcpm.filt[,1]), col=col(nsamples), lwd=2, ylim=c(0,0.26), las=2, 
+     main="", xlab="")
+title(main="Filtered data", xlab="Log2CPM")
+abline(v=lcpm.cutoff, lty=3)
+for (i in 2:nsamples){
+den <- density(lcpm.filt[,i])
+lines(den$x, den$y, col=col(nsamples)[i], lwd=2)
+ }
+graphics::legend("topright", snames, text.col=col(nsamples), bty="n", cex = .6)
+dev.off()
+
+#plot MDS
+pdf(file = paste("sh11141_QC_filtered", r.lcpm.filt, "gMDS_plot.pdf", sep = "_"),
+    width = 9, height = 6)
+plotMDS(lcpm.filt, cex = 0.7, dim.plot = c(1,2))
+title(main="Average (root-mean-square) of largest logFC changes")
+dev.off()
+
+#library sizes
+pdf(file = paste("sh11141_filtered_library_sizes.pdf", sep = "_"),
+    width = 10, height = 6)
+barplot(y1$samples$lib.size, names=y1$samples$group, 
+        ylab="Library size (Read depth)", col = "grey", angle = 45)
+title("Normalize Library Size")
+abline(h=median(y1$samples$lib.size), col = "red")
+dev.off()
+
+#}
+
+#save filtered lib.size for integrated barplot
+t <- data.frame(#sample = y1$samples$S_T_T,
+                sample = rownames(y1$samples),
+                sample2 = y1$samples$S_T_H,
+                group = y1$samples$group,
+                lib.size = y1$samples$lib.size,
+                norm.factors = y1$samples$norm.factors)
+
+#.f = function() {
+#Save
+setwd(dir = paste0(dir, "counts/filtered/"))
+write.table(t, file = paste("sh11141_filtered_library_sizes.txt", sep = "_"),
+            sep = "\t", quote = F, col.names = T, row.names = F)
+
+
+setwd(dir = paste0(dir, "counts/filtered/figures/"))
+pdf(file = paste("sh11141_filtered_library_sizes_ggplot.pdf", sep = "_"),
+    width = 12, height = 6)
+ggplot(t, mapping = aes(x = sample2, y = lib.size, fill = group)) + 
+  geom_col() + 
+  theme_classic() +
+  theme(axis.text.x.bottom = element_text(angle = 35, vjust = .5, 
+                                          face = "bold")) +
+  geom_hline(aes(yintercept =  median(lib.size)), color = "red") +
+  theme(plot.title = element_text(hjust = .5, face = "bold")) +
+  theme(axis.text.x.bottom = element_text(size = 8, face = "bold", 
+                                          hjust = .9, vjust = .9)) +
+  theme(legend.position = "none") +
+  labs(title = paste0(c.line, " normalized library"))
+dev.off()
+#}
+
+#Make DF for summary statistics
+
+#Get mean and variance
+summ1 <- counts.filt %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Gene_Symbol") %>% 
+  pivot_longer(!Gene_Symbol, names_to = "Cell.ID", values_to = "lcpm") %>% 
+  group_by(Gene_Symbol) %>% 
+  summarise(mean = mean(lcpm),
+            sd = sd(lcpm),
+            var = var(lcpm))
+plot(x = log(summ1$mean, base = 2), y = log(summ1$var, base = 2))
+
+#ggplot mean vs variance
+pdf(file = paste("sh11141_mean_vs_variance_counts_filtered.pdf", sep = "_"),
+    width = 7, height = 5)
+ggplot(summ1, mapping = aes(x = log(mean,base = 2), y = log(var,base = 2))) +
+  geom_point() +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs")) +
+  labs(title = "log2 CPM Mean vs Variance filtered") +
+  theme_classic()
+dev.off()
+
+#MAKE DATAFAME FOR STATISTICAL TESTING
+b.log2cpm <- lcpm.filt %>% 
+  as.data.frame() %>%
+  rownames_to_column(var = "Gene") %>%
+  pivot_longer(! Gene, names_to = "Cell", values_to = "Expression.log2cpm")
+#
+b.cpm <- cpm.filt %>% 
+  as.data.frame() %>%
+  rownames_to_column(var = "Gene") %>%
+  pivot_longer(! Gene, names_to = "Cell", values_to = "Expression.cpm")
+#
+b.counts <- counts.filt %>% 
+  as.data.frame() %>%
+  rownames_to_column(var = "Gene") %>%
+  pivot_longer(! Gene, names_to = "Cell", values_to = "Expression.counts")
+
+if (all(b.log2cpm$Gene == b.cpm$Gene)) {
+  print("gene names match, make data frame")
+  
+  #Make data frame
+b.data <- data.frame("Gene" = b.counts$Gene,
+                     "Cell" = b.counts$Cell,
+                     "Expression.counts" = b.counts$Expression.counts,
+                     "Expression.cpm" = b.cpm$Expression.cpm,
+                     "Expression.log2cpm" = b.log2cpm$Expression.log2cpm) %>% 
+  arrange(Cell)
+} else {
+  print("gene names do not match")
+}
+
+
+tmp <- decoder4 %>% 
+  select(CellLine, Cell.Type5, Cell.Type4, S_T_H, S_T_T, S_T,
+         State, Treatment, Time2, Hour, Day, timeunderdrug) %>% 
+  rename("Cell" = "Cell.Type5") %>%
+  arrange(Cell)
+  
+if (all(unique(b.data$Cell) == tmp$Cell)) {
+  print("names match, proceed to join")
+  
+  b.data <- b.data %>% 
+    left_join(tmp, by = "Cell") %>% 
+    mutate_at(vars(Gene), as.factor)
+  
+} else {
+  print("names do not match")
+}
+
+
+
+#b.data1$Treatment <- ordered(b.data1$Treatment,
+#                       levels = c("DMSO", "Afat", "Ribo", "Comb"))
+
+b.data$Treatment <- relevel(b.data$Treatment, ref = "DMSO")
+
+#b.data$Hour <- ordered(b.data$Hour, levels = c(0, 6, 24, 
+#                                                 144, 150, 168, 
+#                                                 288, 294, 312, 
+#                                                 432, 438,  456))
+
+#RELEVEL to set references for model
+#b.data1$State <- relevel(b.data1$State, ref = "Sen") 
+#b.data1$Treatment <- relevel(b.data1$Treatment, ref = "DMSO")
+#b.data1.tmp$Treatment <- ordered(b.data1.tmp$Treatment,
+                       #levels = c("DMSO", "Afat", "Ribo", "Comb"))
+#b.data1$Time <- relevel(b.data1$Time, ref = "D0H0")
+#b.data1$S_T <- relevel(b.data1$S_T, ref = "Sen_DMSO")
+
+str(b.data)
+
+#.f = function() {
+#SAVE DATAFRAME FOR STATISTICAL TESTING
+setwd(paste0(dir, "counts/filtered/"))
+write.table(b.data, file = "sh11141_model_format_counts_post_filter.txt",
+            sep = "\t", col.names = T, row.names = F, quote = F)
+#}
+```
