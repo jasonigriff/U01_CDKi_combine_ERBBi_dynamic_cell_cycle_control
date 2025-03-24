@@ -1,0 +1,766 @@
+---
+title: "sh11141 GAM MODEL DEGs"
+author: "Eric Medina"
+date: "2024-02-05"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#Load libraries
+library(patchwork)
+library(data.table)
+library(ggplot2)
+library(annotables)
+library(RColorBrewer)
+library(gplots)
+library(tidyverse)
+library(openxlsx)
+library(ggeffects)
+library(Biobase)
+library(conflicted)
+library(mgcv)
+library(visreg)
+library(plyr)
+library(doParallel)
+library(stringr)
+library(gridExtra)
+library(gtable)
+library(kableExtra)
+
+#CONFLICTS
+conflict_prefer_all("dplyr", quiet = T)
+conflict_prefer_all("mgcv", losers = "gam", quiet = T)
+
+#RUN FOR MCF7
+
+dir <- "~/u01_rna.seq/sh11141/"
+c.line <- "CAMA1"
+batch <- "sh11141"
+
+#RUN GAM MODEL ON GENES.
+```
+
+```{r}
+#Set seed
+set.seed(0310)
+
+
+start.all.tmp <- Sys.time()
+
+#READ IN GENE EXPRESSION
+
+#Load data
+setwd(dir = paste0(dir, "counts/filtered"))
+b.data2.tmp <- openxlsx::read.xlsx(xlsxFile = paste(batch, 
+                                           "model_format_counts_post_filter.txt",
+                                           sep = "_"))
+names.tmp <- b.data2.tmp %>% 
+  pull(Gene) %>% 
+  unique() %>% 
+  as.character()
+
+#Test with subset of genes
+#names.tmp <- sample(names.tmp, 5)
+
+#fit.tmp1 <- list()
+
+#Contains gam results for each gene
+gam_Full_short.list.genes <- list()
+#Contains input df to gam for each gene
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes <- list()
+#Contains summary output and effect sizes for GAM for each gene
+Fullsmooths1.list.genes <- list()
+#Contains summary output for parametric terms from GAM for each gene
+Fullparametric.list.genes <- list()
+#sum of contributions = predicted phenotype info
+p_sum.contr_pred.pheno.genes <- list()
+#Contains decom plasticity plots
+decomp_0.genes <- list()
+#Contains decomposition level 2 data structure
+gam_decompositiondata2.genes <- list()
+#Contains decomposition level 3 data structure
+gam_decompositiondata3.genes <- list()
+
+
+start.tmp <- Sys.time()
+
+for (i in names.tmp) {
+  print(i)
+  
+  fit.tmp <- b.data2.tmp %>%
+    filter(Gene == i) %>% 
+    #These are for short.term model for plasticity
+      group_by(Gene, Treatment, Hour) %>% 
+      mutate(Hour.dmso = Hour*(Treatment == "DMSO"),
+             Hour.afat = Hour*(Treatment == "Afat"),
+             Hour.ribo = Hour*(Treatment == "Ribo"),
+             Hour.comb = Hour*(Treatment == "Comb"),
+             timeunderdrug = gsub(pattern = "D[0-9]", "", Time),
+             timeunderdrug = gsub(pattern = "[0-9]H", "", timeunderdrug),
+         timeunderdrug = gsub(pattern = "H", "", timeunderdrug),
+         day = ifelse(Hour %in% c(0, 6, 24), 1, 
+               ifelse(Hour %in% c(144, 150, 168), 6,
+               ifelse(Hour %in% c(288, 294, 312), 12,
+               ifelse(Hour %in% c(432, 438, 456), 18, "")))),
+         isHour6 = 1*(timeunderdrug == 6),
+         isHour24 = 1*(timeunderdrug == 24),
+        
+         Hour_RiboR = Hour*(State == "RiboR"),
+         Hour.ribo_RiboR = Hour.ribo*(State == "RiboR"),
+         Hour.afat_RiboR = Hour.afat*(State == "RiboR"),
+         Hour.comb_RiboR = Hour.comb*(State == "RiboR"),
+         
+         Fac.day = ordered(day, levels = c(1, 6, 12, 18)),
+         #Fac.day = as.factor(day),
+         Fac.day.afat = as.factor(day*(Treatment == "Afat")),
+         Fac.day.ribo = as.factor(day*(Treatment == "Ribo")),
+         Fac.day.comb = as.factor(day*(Treatment == "Comb")),
+         
+         RiboFac.day = as.factor((State == "RiboR")*day),
+         RiboFac.day.afat = as.factor((State == "RiboR")*day*(Treatment == "Afat")),
+         RiboFac.day.ribo = as.factor((State == "RiboR")*day*(Treatment == "Ribo")),
+         RiboFac.day.comb = as.factor((State == "RiboR")*day*(Treatment == "Comb")),
+         
+         plastHour6 = Hour*isHour6,
+         plastHour24 = Hour*isHour24,
+         
+         RiboRplastHour6 = (State=="RiboR")*Hour*isHour6,
+         RiboRplastHour24 = (State=="RiboR")*Hour*isHour24,
+         
+         plastHour.afat6 = Hour.afat*isHour6,
+         plastHour.afat24 = Hour.afat*isHour24,
+         plastHour.ribo6 = Hour.ribo*isHour6,
+         plastHour.ribo24 = Hour.ribo*isHour24,
+         plastHour.comb6 = Hour.comb*isHour6,
+         plastHour.comb24 = Hour.comb*isHour24,
+         
+         RiboRplastHour.afat6 = (State=="RiboR")*Hour.afat*isHour6,
+         RiboRplastHour.afat24 = (State=="RiboR")*Hour.afat*isHour24,
+         RiboRplastHour.ribo6 = (State=="RiboR")*Hour.ribo*isHour6,
+         RiboRplastHour.ribo24 = (State=="RiboR")*Hour.ribo*isHour24,
+         RiboRplastHour.comb6 = (State=="RiboR")*Hour.comb*isHour6,
+         RiboRplastHour.comb24 = (State=="RiboR")*Hour.comb*isHour24,
+         ) %>%
+      ungroup() %>% 
+      mutate_at(vars(c(Hour)), as.integer) %>% 
+      mutate_at(vars(Gene, CellLine, State, Treatment, S_T, S_T_T), as.factor) 
+  
+  fit.tmp$State <- relevel(fit.tmp$State, ref = "Sen")
+  fit.tmp$Treatment <- relevel(fit.tmp$Treatment, ref = "DMSO")
+  fit.tmp$timeunderdrug <- factor(fit.tmp$timeunderdrug, levels = c(0, 6, 24))
+  #fit.tmp$day <- factor(fit.tmp$day, levels = c(1, 6, 12, 18))
+  fit.tmp$S_T <- factor(fit.tmp$S_T, levels = c("Sen_DMSO", "Sen_Afat", 
+                                                "Sen_Ribo", "Sen_Comb",
+                                                "RiboR_DMSO", "RiboR_Afat",
+                                                "RiboR_Ribo", "RiboR_Comb" ))
+  
+  #STATISTICAL TESTING: GAM FOR CAPTURING SHORT-TERM CHANGES
+  gam_Full.tmp <- gam(Expression.log2cpm ~  
+                # Pretreatment differences of S and R cells
+                  State + 
+                  # Long term phenotype change under each treatment in resistant 
+                  ## and sensitive cells
+                  Fac.day + Fac.day.afat + Fac.day.ribo + Fac.day.comb +
+                  RiboFac.day+RiboFac.day.afat+RiboFac.day.ribo+RiboFac.day.comb+
+                  # Initial (day 1) response at hour 6/24 under DMSO
+                  isHour6 + isHour24  +  
+                  # Resistant cell deviation in initial (day 1) response at hour
+                  ## 24 under DMSO
+                  State:isHour6 + State:isHour24 + 
+                  # Initial (day 1) response at hour 6/24 under drug x
+                  Treatment:isHour6 + Treatment:isHour24  + 
+                  # Resistant cell deviation in initial (day 1) response at hour 
+                  ## 24 under drug x
+                  State:Treatment:isHour6 + State:Treatment:isHour24 + 
+                  
+                  # Plasticity of response at hour 6/24 during DMSO treatment
+                  
+                  #Talk with Kimya about this line*
+                  s(plastHour6,k=3) + s(plastHour24,k=3) +  
+                  # Plasticity of response at hour 6/24 during drug x treatment 
+                  s(plastHour.afat6,k=3) + s(plastHour.afat24,k=3) + 
+                  s(plastHour.ribo6,k=3) + s(plastHour.ribo24,k=3) + 
+                  s(plastHour.comb6,k=3) + s(plastHour.comb24,k=3) +
+                  
+                  # Resistant cell deviation in plasticity of response at hour 
+                   ## 6/24 during DMSO treatment
+                  s(RiboRplastHour6,k=3) + s(RiboRplastHour24,k=3) +
+                  # Resistant cell deviation in plasticity of response at hour
+                   ## 6/24 during DMSO treatment
+                  s(RiboRplastHour.afat6,k=3) + s(RiboRplastHour.afat24,k=3) + 
+                  s(RiboRplastHour.ribo6,k=3) + s(RiboRplastHour.ribo24,k=3) +    
+                  s(RiboRplastHour.comb6,k=3) + s(RiboRplastHour.comb24,k=3) 
+                  , data=fit.tmp, method="REML")
+     
+     #Make predictions using GAM (and get residual model error)
+     fit.tmp$predFULL <- predict(gam_Full.tmp)
+     fit.tmp$residFULL <- residuals(gam_Full.tmp)
+     fit.tmp$standresids <- residuals(gam_Full.tmp, "scaled.pearson")
+     fit.tmp$uclFULL <- fit.tmp$predFULL + predict(gam_Full.tmp, se=T)$se.fit
+     fit.tmp$lclFULL <- fit.tmp$predFULL- predict(gam_Full.tmp,se=T)$se.fit
+     
+     #Make new columns
+     fit.tmp <- fit.tmp %>% 
+       group_by(State, Treatment, day) %>% 
+       mutate(Expression.log2cpm_Reltimeunderdrug0 = 
+             sum(Expression.log2cpm*(timeunderdrug == 0))) %>%
+       ungroup() %>% 
+       mutate(
+              #cent = attr(Expression.log2cpm, "scaled:center"),
+              #scl = attr(Expression.log2cpm, "scaled:scale"),
+              lclFULL_2 = predFULL - 1.96 * predict(gam_Full.tmp, se=T)$se.fit,
+              uclFULL_2 = predFULL + 1.96 * predict(gam_Full.tmp, se=T)$se.fit) %>%
+       select(Gene, Expression.log2cpm, 
+              Expression.log2cpm_Reltimeunderdrug0,
+              predFULL, residFULL,
+              standresids, uclFULL, lclFULL, uclFULL_2, lclFULL_2, everything())
+     
+     #Store results
+     gam_Full_short.list.genes[[i]] <- gam_Full.tmp
+     gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] <- fit.tmp
+     
+     
+   #CALCULATE EFFECT SIZE AND GENERATE OUTPUT TABLE FOR SMOOTH TABLE OF RESULTS
+     
+     # get smooth terms from GAM model output
+     Fullsmooths0.tmp <- data.table(Gene = i,
+                                #term = "smooth", 
+                                summary(gam_Full.tmp)$s.table, 
+                                keep.rownames = T)
+     
+     # add row order variable to maintain ordering
+     Fullsmooths0.tmp$smoothid  <- 1:nrow(Fullsmooths0.tmp) 
+     
+     # predict all the smooth terms and match to data to see how they 
+     ## change over time
+     s_terms.tmp <- cbind(fit.tmp,
+                 predict(gam_Full.tmp,
+                         type="terms" )[, Fullsmooths0.tmp$rn])
+     
+     # remove brackets from col names  
+     names(s_terms.tmp) <- gsub("[()]", "", names(s_terms.tmp))  
+     
+     # Get a metric of effect of smooth: For each smooth term assess trend 
+     ## over time: 
+     ## compare initial value with values at later time point
+     ## (excluding unchanged values)
+     s_effects.tmp <- rbindlist( lapply(Fullsmooths0.tmp$rn, function(i){
+       
+       
+       # make temp copy
+       tmp <- data.table(s_terms.tmp); 
+       
+       # remove brackets in colname and name focal col (term X)
+       setnames(tmp, old = gsub("[()]", "", i ) , new= "X")
+       #setnames(tmp, old = gsub("[()]", "", "s(plastHour6)" ) , new= "X")
+       #setnames(tmp, old = gsub("[()]", "", "s(plastHour.ribo24)" ) , new= "X")
+       
+       # get initial value of focal term (X) at hour 0
+       ## if statement confirms all DOHO values are identical
+       if (tmp[Hour == 0]$X[1] == mean(tmp[Hour==0]$X)) {
+         strt.tmp <- tmp[Hour == 0]$X[1]
+         
+         # get mean change in focal term (X) after hour 0
+         end.tmp  <- mean(tmp[Hour != 0][X!= strt.tmp]$X) 
+         
+         data.table(rn= i, effect= end.tmp - strt.tmp)
+       } else {
+         print("False")
+       }
+     }))
+     
+     
+     # merge smooth table and effect metric
+     Fullsmooths.tmp <-  merge(Fullsmooths0.tmp, 
+                               s_effects.tmp, by="rn")[order(smoothid)]
+     
+     #Annotate Treatments, Hour, and State and Store results
+     Fullsmooths1.list.genes[[i]] <- Fullsmooths.tmp %>% 
+       as.data.frame() %>% 
+       rename("p.value" = "p-value",
+              "s.covariate" = "rn") %>% 
+       mutate_at(vars(c(p.value)), as.numeric) %>% 
+       mutate(Treatment = ifelse(str_detect(s.covariate, ".ribo"), "Ribo",
+                          ifelse(str_detect(s.covariate, ".afat"), "Afat",
+                          ifelse(str_detect(s.covariate, ".comb"), "Comb",
+                            "DMSO"))),
+              Hour = ifelse(str_detect(s.covariate, "24"), 24, 6),
+              State = ifelse(str_detect(s.covariate, "RiboR"), "RiboR", "Sens"),
+              Hourlab = paste0("Hour: ", Hour),
+              Statelab = paste0("State: ", State)) %>% 
+       select(Gene, s.covariate, effect, p.value, everything())
+     
+     
+     #GET PARAMETRIC TABLE
+     
+     # get smooth terms from GAM model output
+     Fullsmooths0.tmp <- data.table(Gene = i,
+                                #term = "smooth", 
+                                summary(gam_Full.tmp)$p.table, 
+                                keep.rownames = T)
+     
+     
+     Fullparametric.list.genes[[i]] <- Fullsmooths0.tmp %>% 
+         as.data.frame() %>% 
+         rename("p.value" = "Pr(>|t|)",
+                "t_value" = "t value",
+                "Std.Error" = "Std. Error",
+                "p.covariate" = "rn") %>% 
+         mutate_at(vars(c(p.value)), as.numeric) %>% 
+         select(Gene, p.covariate, Estimate, p.value, everything())
+     
+     
+     #CONSOLIDATE DECOMPOSITION INTO KEY EFFECTS ON PHENOTYPE
+    
+    gam_terms.tmp <- cbind("(Intercept)" = coef(gam_Full.tmp)["(Intercept)"],
+                    predict(gam_Full.tmp, type = "terms"))
+    
+    colnames(gam_terms.tmp) <- paste0("gam_", colnames(gam_terms.tmp))
+
+    # Verify that the sum of contributions equals the predicted phenotype value
+    p_sum.contr_pred.pheno.genes[[i]] <- cbind("rowsums" = rowSums(gam_terms.tmp), 
+                               "pred.response" = predict(gam_Full.tmp, 
+                                                         type="response"))
+  
+    # Join with data
+    decompositiondata0.tmp <- data.table(gather(cbind(fit.tmp, 
+                                              gam_terms.tmp), 
+                                        var, val, colnames(gam_terms.tmp)))  
+    #alternative code
+    #data.table(pivot_longer(cbind(fit.tmp, gam_terms.tmp), 
+    #                               !colnames(fit.tmp), 
+    #                               names_to = "var", 
+    #                               values_to = "val")) %>% 
+    #  arrange(var)
+    
+    # Need to develop this further but we can see how specific terms have 
+    ## effects over time
+    decompositiondata0.tmp$Treatment <- ordered(decompositiondata0.tmp$Treatment, 
+                                        levels = c("DMSO", "Ribo", 
+                                                   "Afat", "Comb"))
+    
+    #Predicted values for terms on y-axis: This example looking at 
+    ## plastHour and RiboRpastHour.comb6 and 24 terms 
+    decomp_0.genes[[i]] <- 
+      ggplot(decompositiondata0.tmp[grep("plast", var)][grep("comb", var)],
+       aes(x = Hour,y = val, col = var, fill = var, group = S_T)) +
+      geom_point(shape = "circle") +
+      facet_grid(State~Treatment)
+    
+    
+    #CONSOLIDATE THE DECOMPOSITION INTO KEY EFFECTS ON PHENOTYPE
+    gam_termsConsolidated.tmp <- list()
+    
+    # Pre treatment differences of Resistant and Sensitive cells
+    gam_termsConsolidated.tmp$R_0 <- gam_terms.tmp[ , "gam_(Intercept)"] + 
+      gam_terms.tmp[ , "gam_State"]
+    
+    # Initial short term responses across treatments
+    gam_termsConsolidated.tmp$R_6_drug <- gam_terms.tmp[ , "gam_isHour6"] + 
+      gam_terms.tmp[ , "gam_isHour6:Treatment"] + 
+      gam_terms.tmp[ , "gam_State:isHour6"] +
+      gam_terms.tmp[ , "gam_State:isHour6:Treatment"] 
+    
+    gam_termsConsolidated.tmp$R_24_drug <- gam_terms.tmp[ , "gam_isHour24"] +
+      gam_terms.tmp[ , "gam_isHour24:Treatment"] + 
+      gam_terms.tmp[ , "gam_State:isHour24"] + 
+      gam_terms.tmp[ , "gam_State:isHour24:Treatment"] 
+    
+    # Long term trends across treatments
+    gam_termsConsolidated.tmp$R_LongTrend_drug <- gam_terms.tmp[ , "gam_Fac.day"] +
+      gam_terms.tmp[ , "gam_Fac.day.afat"] +
+      gam_terms.tmp[ , "gam_Fac.day.ribo"] +
+      gam_terms.tmp[ , "gam_Fac.day.comb"] +
+      gam_terms.tmp[ , "gam_RiboFac.day"] + 
+      gam_terms.tmp[ , "gam_RiboFac.day.afat"] + 
+      gam_terms.tmp[ , "gam_RiboFac.day.ribo"] +
+      gam_terms.tmp[ , "gam_RiboFac.day.comb"]
+    
+    # Plasticity of hr 6 response across treatments
+    gam_termsConsolidated.tmp$R_Plasticity6_drug <- gam_terms.tmp[ , "gam_s(plastHour6)"] +
+      gam_terms.tmp[ , "gam_s(plastHour.afat6)"] + 
+      gam_terms.tmp[ , "gam_s(plastHour.ribo6)"] +
+      gam_terms.tmp[ , "gam_s(plastHour.comb6)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour6)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.afat6)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.ribo6)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.comb6)"]
+    
+    # Plasticity of hr 24 response across treatments
+    gam_termsConsolidated.tmp$R_Plasticity24_drug <- gam_terms.tmp[ , "gam_s(plastHour24)"] +
+      gam_terms.tmp[ , "gam_s(plastHour.afat24)"] +
+      gam_terms.tmp[ , "gam_s(plastHour.ribo24)"] + 
+      gam_terms.tmp[ , "gam_s(plastHour.comb24)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour24)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.afat24)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.ribo24)"] + 
+      gam_terms.tmp[ , "gam_s(RiboRplastHour.comb24)"]
+    
+    # level 2 consolidation
+    gam_termsConsolidated2.tmp <- data.table(
+      LongTrend = unname(gam_termsConsolidated.tmp$R_0) + 
+        unname(gam_termsConsolidated.tmp$R_LongTrend_drug),
+      InitialResponse = unname(gam_termsConsolidated.tmp$R_6_drug) + 
+        unname(gam_termsConsolidated.tmp$R_24_drug),
+      Plasticity = unname(gam_termsConsolidated.tmp$R_Plasticity6_drug) +
+        unname(gam_termsConsolidated.tmp$R_Plasticity24_drug))
+    
+    # level 3 consolidation
+    gam_termsConsolidated3.tmp <- data.table(
+      LongTrend = unname(gam_termsConsolidated.tmp$R_0) + 
+        unname(gam_termsConsolidated.tmp$R_LongTrend_drug),
+      ShortResponse = unname(gam_termsConsolidated.tmp$R_6_drug) + 
+        unname(gam_termsConsolidated.tmp$R_24_drug) +
+        unname(gam_termsConsolidated.tmp$R_Plasticity6_drug) + 
+        unname(gam_termsConsolidated.tmp$R_Plasticity24_drug))
+    
+    # Join decomposition (levels 2/3) data with observed data
+    gam_decompositiondata2.genes[[i]] <- data.table(gather(cbind(fit.tmp,
+                                              gam_termsConsolidated2.tmp),
+                                              var, val,
+                                              colnames(gam_termsConsolidated2.tmp)))
+    
+    gam_decompositiondata3.genes[[i]] <- data.table(gather(cbind(fit.tmp,
+                                              gam_termsConsolidated3.tmp),
+                                        var, val,
+                                        colnames(gam_termsConsolidated3.tmp)))
+
+}
+end.tmp <- Sys.time()
+print(df.input_gam.run_effect.consol_time <- end.tmp - start.tmp)
+#Took 30.09841 min for all 13383 genes
+
+#Fullsmooths1.list.genes[[i]] %>% 
+#  arrange(p.value)
+
+#Fullparametric.list.genes[[i]] %>% 
+#  arrange(p.value)
+
+gam_decompositiondata2.tmp <- ldply(gam_decompositiondata2.genes)
+
+gam_decompositiondata3.tmp <- ldply(gam_decompositiondata3.genes)
+#Save decomposition
+
+setwd(dir = paste0(dir, "degs/gam_results/short_term_model/"))
+openxlsx::write.xlsx(gam_decompositiondata2.tmp, file = paste(batch, c.line,
+                                                          "gam_decompositiondata2",
+                                                          "genes_table.xlsx",
+                                                          sep = "_"))
+
+openxlsx::write.xlsx(gam_decompositiondata3.tmp, file = paste(batch, c.line,
+                                                          "gam_decompositiondata3",
+                                                          "genes_table.xlsx",
+                                                          sep = "_"))
+
+
+
+#CORRECT FOR SMOOTH FDR BASED ON S.COVARIATES
+
+#Get cov term names
+cov.tmp <- Fullsmooths1.list.genes[[i]] %>% 
+  pull(s.covariate) %>% 
+  unique() %>% 
+  as.character()
+#k <- "s(plastHour.ribo24)"
+
+#put all genes with s.covariates into dataframe
+tmp <- ldply(Fullsmooths1.list.genes, .id = NULL)
+
+#Tmp list contains corrected p.values for each term
+fdr.tmp <- list()
+
+start.tmp <- Sys.time()
+#set.seed(1203)
+
+for (k in cov.tmp) {
+  print(k)
+  
+  fdr.tmp[[k]] <- tmp %>% 
+    filter(s.covariate == k) %>% 
+    mutate(FDR = p.adjust(p.value)) %>% 
+    select(Gene, s.covariate, effect, p.value, FDR, everything())
+}
+
+end.tmp <- Sys.time()
+print(fdr.short.smooth.time <- end.tmp - start.tmp)
+
+#Merge lists into one dataframe
+fullsmooths_short_df <- ldply(fdr.tmp, .id = NULL)
+
+
+#Save 
+setwd(dir = paste0(dir, "degs/gam_results/short_term_model/"))
+openxlsx::write.xlsx(fullsmooths_short_df, file = paste(batch, c.line, 
+                                                  "genes_gam_short.term",
+                                                  "smooths_table.xlsx", 
+                                                  sep = "_"))
+
+
+
+#CORRECT FOR PARAMETRIC FDR BASED ON COVARIATES
+
+#Get parametric terms
+cov.tmp <- Fullparametric.list.genes[[i]] %>% 
+  pull(p.covariate) %>% 
+  unique() %>% 
+  as.character()
+#k <- "StateRiboR"
+
+tmp <- Fullparametric.list.genes[[i]]
+
+#Tmp list contains corrected p.values for each term
+fdr.tmp <- list()
+
+start.tmp <- Sys.time()
+#set.seed(1203)
+
+for (k in cov.tmp) {
+  print(k)
+  
+  fdr.tmp[[k]] <- tmp %>% 
+    filter(p.covariate == k) %>% 
+    mutate(FDR = p.adjust(p.value)) %>% 
+    select(Gene, p.covariate, Estimate, p.value, FDR, everything())
+}
+
+end.tmp <- Sys.time()
+print(fdr.time.p.short <- end.tmp - start.tmp)
+
+#Transform lists into one data frame
+fullparametric_short_df <- ldply(fdr.tmp, .id = NULL)
+  
+#Save each collection
+setwd(dir = paste0(dir, "degs/gam_results/short_term_model/"))
+openxlsx::write.xlsx(fullparametric_short_df, file = paste(batch, c.line,
+                                                   "genes_gam_short.term",
+                                                   "parametric_table.xlsx", 
+                                                   sep = "_"))
+
+
+
+#GENERATE PDF OF PLOTS 
+names.tmp <- fullsmooths_short_df %>% 
+    filter(Treatment != "DMSO",
+           FDR <= 0.05) %>% 
+    pull(Gene) %>% 
+    as.character() %>% 
+    unique()
+
+start.tmp <- Sys.time()
+
+for (i in names.tmp){
+  print(i)
+  
+  input_d.tmp <- gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]]
+
+    #ASSESS DECOMPOSITIN RESULTS
+    
+    g1.tmp <- gam_decompositiondata2.genes[[i]] %>% 
+      mutate(Treatment = ordered(Treatment, levels = c("DMSO", "Ribo",
+                                                   "Afat", "Comb"))) %>% 
+      ggplot(mapping = aes(
+                     x = Hour,
+                     y = val, col = var, 
+                     fill = var, group = var)) +
+      theme_classic() + 
+      theme(aspect.ratio = 1) +
+      #geom_path(linetype = "dashed", alpha = 1) +
+      geom_line(linetype = "dashed", alpha = 1) +
+      geom_point(shape = "circle") +
+      facet_grid(State~Treatment) +
+      geom_hline(yintercept = 0, linetype = "dotted") +
+      labs(y = "Phenotype component") #+
+      #theme(plot.margin = unit(c(0, 0, -0.5, 0), "in"))
+    
+    g2.tmp <- gam_decompositiondata3.genes[[i]] %>%
+      mutate(Treatment = ordered(Treatment, levels = c("DMSO", "Afat",
+                                                   "Ribo", "Comb"))) %>% 
+      ggplot(mapping = aes(x = Hour, y = val, col = var, fill = var, 
+                                 group = var)) + 
+      theme_classic() +
+      theme(aspect.ratio = 1) +
+      #geom_path(linetype = "dashed", alpha = 1) +
+      geom_line(linetype = "dashed", alpha = 1) +
+      geom_point(shape = "circle") +
+      facet_grid(State~Treatment) +
+      labs(y = "Phenotype component") #+
+      #theme(plot.margin = unit(c(0, 0, -0.5, 0), "in"))
+    
+    g3.tmp <- gam_decompositiondata3.genes[[i]] %>% 
+      filter(var == "ShortResponse") %>% 
+      mutate(Treatment = ordered(Treatment, levels = c("DMSO", "Afat",
+                                                   "Ribo", "Comb"))) %>% 
+      ggplot(mapping = aes(x = Hour, 
+                           y = val, 
+                           col = State, fill = State, group = State)) +
+      theme_classic() + theme(aspect.ratio = 1) +
+      #geom_path(linetype = "dashed", alpha = 1) +
+      geom_line(linetype = "dashed", alpha = 1) +
+      geom_point(shape = "circle") +
+      facet_grid(~Treatment) +
+      labs(title = paste0(i, " : Short-term Response"), y="Drug response") #+
+      #theme(plot.margin = unit(c(0, 0, -0.5, 0), "in"))
+    
+    
+    #Long-term trend
+    g4.tmp <- input_d.tmp %>% 
+      mutate(Treatment = ordered(Treatment, 
+                             levels = c("DMSO", "Ribo", "Afat", "Comb"))) %>%
+      arrange(Hour) %>% 
+      ggplot(aes(x = Hour, y = Expression.log2cpm, col = Treatment,
+           fill = Treatment, group = S_T))+
+      geom_ribbon(aes(ymax = uclFULL, ymin = lclFULL), col = NA,alpha = 0.4) +
+      #geom_path()+
+      geom_path(aes(y = predFULL), alpha = 1) +
+      geom_point(shape = "circle") +
+      facet_grid(State~Treatment) +
+      labs(title = paste0(i, " : Long-term Trend")) +
+      scale_color_manual(values = c("purple2", "green3", "cyan3", "red3")) +
+      scale_fill_manual(values = c("purple2", "green3", "cyan3", "red3")) +
+      theme_classic() #+
+      #theme(plot.margin = unit(c(0, 0, -0.5, 0), "in"))
+
+    #Short-term trend
+    g5.tmp <- input_d.tmp %>% 
+      mutate(Treatment = ordered(Treatment, 
+                             levels = c("DMSO", "Afat", "Ribo", "Comb"))) %>%
+      ggplot(mapping = aes(
+                       #x = Hour,
+                       #x = sqrt(day),
+                       x = Fac.day,
+                       y = Expression.log2cpm-Expression.log2cpm_Reltimeunderdrug0,
+                       color = timeunderdrug,
+                       fill = timeunderdrug,
+                       group=interaction(timeunderdrug,State,Treatment))) +
+      geom_point() +
+      facet_grid(State~Treatment) +
+      theme_classic() +
+      scale_fill_manual(values = c("red3", "green3", "cyan3", "purple")) +
+      labs(title = paste0(i, " : Short-term Trend")) +
+      
+      #geom_ribbon(aes(ymax=cent+uclFULL*scl-Expression.log2cpm_Reltimeunderdrug0,
+      #          ymin=cent+lclFULL*scl-Expression.log2cpm_Reltimeunderdrug0), 
+      #         col=NA, alpha=0.4)+
+  geom_ribbon(
+              #data = pd1, 
+              aes(ymin = lclFULL_2-Expression.log2cpm_Reltimeunderdrug0,
+                  ymax = uclFULL_2-Expression.log2cpm_Reltimeunderdrug0
+                  #fill = "CI"
+                  ),
+              col = NA, alpha = 0.4) +
+  #geom_line(aes(y=cent+predFULL*scl-Expression.log2cpm_Reltimeunderdrug0)) #+
+  geom_line(aes(y=predFULL-Expression.log2cpm_Reltimeunderdrug0)) #+
+  #geom_step(mapping = aes(group = day), color = "black")+
+      #theme(plot.margin = unit(c(0, 0, -0.5, 0), "in"))
+    
+    
+    setwd(dir = paste0(dir, 
+                       "degs/gam_results/short_term_model/figures/"))
+    pdf(file = paste(i, batch, c.line, "short.term_plots.pdf", sep = "_"),
+        height = 12, width = 11)
+    grid.arrange(g4.tmp, g5.tmp, ncol = 1)
+    grid.arrange(g1.tmp, g2.tmp, g3.tmp, ncol = 1)
+    dev.off()
+}
+
+end.tmp <- Sys.time()
+print(short.term.plots <- end.tmp - start.tmp)
+
+end.all.tmp <- Sys.time()
+print(whole.script.time <- end.all.tmp - start.all.tmp)
+```
+
+```{r}
+#Plots
+i <- "CDK6"
+
+#Look at summary
+summary(gam_Full_short.list.genes[[i]])
+
+#Long-term trend
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] %>% 
+  #dplyr::filter(Gene_Set == i) %>% 
+  mutate(Treatment = ordered(Treatment, 
+                             levels = c("DMSO", "Ribo", "Afat", "Comb"))
+         ) %>%
+  arrange(Hour) %>% 
+  ggplot(aes(x = Hour, y = Expression.log2cpm, col = Treatment,
+           fill = Treatment, group = S_T))+
+  geom_ribbon(aes(ymax = uclFULL, ymin = lclFULL), col = NA,alpha = 0.4) +
+  #geom_path()+
+  #geom_path(aes(y = predFULL), alpha = 1) +
+  geom_line(aes(y = predFULL), alpha = 1) +
+  geom_point(shape = "circle") +
+  facet_grid(State~Treatment) +
+  labs(title = paste0(i, " : ", i)) +
+  scale_color_manual(values = c("purple2", "green3", "cyan3", "red3")) +
+  scale_fill_manual(values = c("purple2", "green3", "cyan3", "red3")) +
+  theme_classic() 
+
+#Short-term trend
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] %>% 
+  mutate(Treatment = ordered(Treatment, 
+                             levels = c("DMSO", "Afat", "Ribo", "Comb"))) %>%
+  ggplot(mapping = aes(
+                       #x = Hour,
+                       #x = sqrt(day),
+                       x = Fac.day,
+                       y = Expression.log2cpm-Expression.log2cpm_Reltimeunderdrug0,
+                       color = timeunderdrug,
+                       fill = timeunderdrug,
+                       group=interaction(timeunderdrug,State,Treatment))) +
+  geom_point() +
+  facet_grid(State~Treatment) +
+  theme_classic() +
+  scale_fill_manual(values = c("red3", "green3", "cyan3", "purple")) +
+  labs(title = paste0(i, " : ", i)) +
+  #geom_ribbon(aes(ymax=cent+uclFULL*scl - Expression.log2cpm_Reltimeunderdrug0,
+  #                ymin=cent+lclFULL*scl - Expression.log2cpm_Reltimeunderdrug0), 
+  #            col=NA, alpha=0.4)+
+  geom_ribbon(
+              #data = pd1, 
+              
+              aes(ymin = lclFULL_2-Expression.log2cpm_Reltimeunderdrug0,
+                  ymax = uclFULL_2-Expression.log2cpm_Reltimeunderdrug0
+                  #fill = "CI"
+                  ),
+              col = NA, alpha = 0.4
+                  ) +
+  #geom_line(aes(y=cent+predFULL*scl-Expression.log2cpm_Reltimeunderdrug0)) #+
+  geom_line(aes(y=predFULL-Expression.log2cpm_Reltimeunderdrug0)) #+
+  #geom_step(mapping = aes(group = day), color = "black")
+
+.f = function() {
+#EVALUATE MODEL ASSUMPTIONS
+
+# Residual non-linearity / structural misfit (residual pattern)
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] %>% 
+  ggplot(aes(x=Expression.log2cpm,y=residFULL,col=Hour,group=S_T)) +
+  geom_point()+theme_classic()+
+  labs(x="Fitted Value",y="Residuals")
+
+# Normality of residuals
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]]%>% 
+  ggplot(aes(x=residFULL)) + geom_histogram()+theme_classic()+
+  labs(x="Residuals")
+
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] %>% 
+  ggplot(aes(qqnorm(standresids)[[1]], standresids))+geom_point(na.rm = TRUE)+
+  geom_abline(linetype="dashed")+
+  labs(x="Theoretical Quantiles",y="Standardized Residuals")+
+  ggtitle("Normal Q-Q")+
+  theme_classic()
+
+# Equal variance (homoscedasticity)
+gam.input_predict.values_Sen.RiboR.paths_short.list.genes[[i]] %>% 
+  ggplot(aes(predFULL, sqrt(abs(standresids)))) +
+  geom_point() +
+  ggtitle("Scale-Location") +
+  stat_smooth(method="loess", na.rm = TRUE) +
+  labs(x="Fitted Value",y=expression(sqrt("|Standardized residuals|"))) + 
+  theme_classic()
+}
+```
+

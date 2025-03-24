@@ -1,0 +1,556 @@
+---
+title: "u01 time series data, synergy model, riboR as reference"
+author: "Eric Medina"
+date: "2024-02-05"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#Load libraries
+library(patchwork)
+library(data.table)
+library(ggplot2)
+library(annotables)
+library(RColorBrewer)
+library(gplots)
+library(tidyverse)
+library(openxlsx)
+library(ggeffects)
+library(Biobase)
+library(conflicted)
+library(mgcv)
+library(visreg)
+library(plyr)
+library(doParallel)
+library(stringr)
+library(gridExtra)
+library(gtable)
+library(kableExtra)
+
+#CONFLICTS
+conflict_prefer_all("dplyr", quiet = T)
+conflict_prefer_all("mgcv", losers = "gam", quiet = T)
+```
+
+```{r}
+#RUN FOR MCF7
+
+#dir <- "~/u01_rna.seq.copy/sh10050/"
+#c.line <- "MCF7"
+#batch <- "sh10050"
+#ssgsea_scores <- "ssGSEA_collections_H_C2_C5_C6_scores_list.rds"
+```
+```{r}
+#RUN FOR CAMA1
+
+dir <- "~/u01_rna.seq.copy/sh11141/"
+c.line <- "CAMA1"
+batch <- "sh10050"
+ssgsea_scores <- "sh11141_CAMA1_ssGSEA_collections_H_C2_C5_C6_scores_list.rds"
+```
+
+```{r}
+#SHORT.TERM DYNAMIC CHANGES ANALYSIS: SYNERGY
+
+start.all.tmp <- Sys.time()
+
+#Set seed
+set.seed(0310)
+#READ IN SCORES
+
+#Load data
+setwd(dir = paste0(dir, "ssgsea_scores"))
+
+gsva.3.list.tmp <- readRDS(file = ssgsea_scores)
+
+collection <- c("H", "C2", "C5", "C6")
+#collection <- c("H")
+#i <- "H"
+#j <- "HALLMARK_G2M_CHECKPOINT"
+
+#Contains GAM short term changes for collections/genesets
+gam_Full_short.list <- list()
+#Contains input values for GAM and effect sizes calculations for genesets
+gam.input_predict.values_Sen.RiboR.paths_short.list <- list()
+#Contains smooth term table output from GAM
+Fullsmooths1.list <- list()
+#Contains parametric term table output from GAM
+Fullparametric.list <- list()
+
+#set.seed(0310)
+start.tmp <- Sys.time()
+for (i in collection) {
+  print(i)
+  
+  #isolate collection from collection-list
+  dd.tmp <- gsva.3.list.tmp[[i]] %>% 
+    as.data.frame() 
+  
+  #Get all gene-set names 
+  names.tmp <- dd.tmp %>% 
+    pull(Gene_Set) %>% 
+    as.character() %>% 
+    unique()
+  
+  for (j in names.tmp) {
+    print(j)
+    
+    #TRANSFORM SSGSEA SCORES INTO DATAFRAME FOR STATISTICAL TESTING
+    
+    fit.tmp <- dd.tmp %>%
+      #Isolate each gene set
+      filter(Gene_Set == j) %>% 
+      as.data.frame() %>%
+      droplevels() %>% 
+    
+    #These are for second model where smooth is enforced for each treatment
+      group_by(Gene_Set, Treatment, Hour) %>% 
+      mutate(Hour.dmso = Hour*(Treatment == "DMSO"),
+             Hour.afat = Hour*(Treatment == "Afat"),
+             Hour.ribo = Hour*(Treatment == "Ribo"),
+             Hour.comb = Hour*(Treatment == "Comb"),
+             timeunderdrug = gsub(pattern = "D[0-9]", "", Time),
+             timeunderdrug = gsub(pattern = "[0-9]H", "", timeunderdrug),
+         timeunderdrug = gsub(pattern = "H", "", timeunderdrug),
+         
+         # Make indicator variables showing if each drug is given and if the 
+         ## combination is given.
+         # This encodes for main drug effects and combination 
+         ## treatment effects (synergy).
+         RiboTreated = ifelse(Treatment %in% c("Ribo", "Comb"), 1, 0),
+         AfatTreated = ifelse(Treatment %in% c("Afat", "Comb"), 1, 0),
+         CombTreated = ifelse(Treatment %in% c("Comb"), 1, 0),
+         
+         #Day variable
+         day = ifelse(Hour %in% c(0, 6, 24), 1, 
+               ifelse(Hour %in% c(144, 150, 168), 6,
+               ifelse(Hour %in% c(288, 294, 312), 12,
+               ifelse(Hour %in% c(432, 438, 456), 18, "")))),
+         day = ordered(day, levels = c(1, 6, 12, 18)),
+         
+         # Indicator variables for 6 and 24 hr after drugging
+         isHour6 = 1*(timeunderdrug == 6),
+         isHour24 = 1*(timeunderdrug == 24),
+         
+         # Variables for long term phenotypes trends in resistant and sensitive
+         ## cells under each treatment relative to DMSO.
+         # Reparameterize in terms of cumulative time (days) of the experiment.
+         CumDay6 = ifelse(day >= 6, 1, 0),
+         CumDay12 = ifelse(day >= 12, 1, 0),
+         CumDay18 = ifelse(day >= 18, 1, 0),
+         
+         # Plasticity under DMSO variables
+         plastHour6 = Hour*isHour6,
+         plastHour24 = Hour*isHour24,
+         RiboRplastHour6 = (State == "Sen")*Hour*isHour6,
+         RiboRplastHour24 = (State == "Sen")*Hour*isHour24,
+         
+         # Plasticity under drug x variables
+         ## Encode predictors in terms of main and synergistic effects
+         ## of treatments on cell rewiring.
+         plastHour.AfatTreated6 = (Hour.afat + Hour.comb)*isHour6,
+         plastHour.AfatTreated24 = (Hour.afat + Hour.comb)*isHour24,
+         RiboRplastHour.AfatTreated6 = (State == "Sen")*(Hour.afat + Hour.comb)*isHour6,
+         RiboRplastHour.AfatTreated24 = (State == "Sen")*(Hour.afat + Hour.comb)*isHour24,
+         
+         plastHour.RiboTreated6 = (Hour.ribo + Hour.comb)*isHour6,
+         plastHour.RiboTreated24 = (Hour.ribo + Hour.comb)*isHour24,
+         RiboRplastHour.RiboTreated6 = (State == "Sen")*(Hour.ribo + Hour.comb)*isHour6,
+         RiboRplastHour.RiboTreated24 = (State == "Sen")*(Hour.ribo + Hour.comb)*isHour24,
+         
+         plastHour.CombTreated6 = Hour.comb*isHour6,
+         plastHour.CombTreated24 = Hour.comb*isHour24,
+         RiboRplastHour.CombTreated6 = (State == "Sen")*Hour.comb*isHour6,
+         RiboRplastHour.CombTreated24 = (State == "Sen")*Hour.comb*isHour24) %>%
+      ungroup() %>% 
+      mutate_at(vars(c(Hour)), as.integer) %>% 
+      mutate_at(vars(Gene_Set, CellLine, S_T, S_T_T), as.factor) 
+  
+  
+  #****REMOVE COMMITT BELOW WHEN USING SENSITIVE AS REFERENCE
+  fit.tmp$State <- relevel(fit.tmp$State, ref = "Sen")
+  
+  #****REMOVE COMMITT BELOW WHEN USING RESISTANT AS REFERENCE
+  #fit.tmp$State <- relevel(fit.tmp$State, ref = "RiboR")
+  
+  
+  fit.tmp$Treatment <- relevel(fit.tmp$Treatment, ref = "DMSO")
+  fit.tmp$timeunderdrug <- factor(fit.tmp$timeunderdrug, levels = c(0, 6, 24))
+  #fit.tmp$day <- factor(fit.tmp$day, levels = c(1, 6, 12, 18))
+  fit.tmp$S_T <- factor(fit.tmp$S_T, levels = c("Sen_DMSO", "Sen_Ribo",
+                                                "Sen_Afat", "Sen_Comb",
+                                                "RiboR_DMSO", "RiboR_Ribo", 
+                                                "RiboR_Afat", "RiboR_Comb" ))
+  
+  
+  #STATISTICAL TESTING: GAM FOR CAPTURING SHORT-TERM CHANGES
+  #GAM WITH INDICATOR COVARIATES FOR SHORT TERM CHANGES
+     gam_Full.tmp <- gam(scale(Enrichment_Score) ~  
+                # Pretreatment differences of S and R cells
+                  State + 
+                  
+                  # Long term cumulative phenotype change under each treatment 
+                  ## in sensitive cells
+                  ## DMSO effects
+                  CumDay6 + CumDay12 + CumDay18 +
+                  
+                  # Afatinib effects
+                  AfatTreated:CumDay6 + AfatTreated:CumDay12 + 
+                  AfatTreated:CumDay18 + 
+                  # Ribociclib effects
+                  RiboTreated:CumDay6 + RiboTreated:CumDay12 + 
+                  RiboTreated:CumDay18 +
+                  # Synergy effects of combination treatment
+                  CombTreated:CumDay6 + CombTreated:CumDay12 + 
+                  CombTreated:CumDay18 +  
+                  
+                  # Resistant cell deviation in long-term cumulative phenotype 
+                  ## change.
+                  
+                  ## DMSO effects
+                  State:CumDay6 + State:CumDay12 + State:CumDay18 +
+                  # Afatinib effects
+                  State:AfatTreated:CumDay6 + State:AfatTreated:CumDay12 + 
+                  State:AfatTreated:CumDay18 +
+                  # Ribociclib effects
+                  State:RiboTreated:CumDay6 + State:RiboTreated:CumDay12 +
+                  State:RiboTreated:CumDay18 +
+                  # Synergy effects of combination treatment
+                  State:CombTreated:CumDay6 + State:CombTreated:CumDay12 + 
+                  State:CombTreated:CumDay18 + 
+                    
+                  # Initial (day 1) response at hour 6/24 under DMSO
+                  isHour6 + isHour24  +  
+                  # Resistant cell deviation in initial (day 1) response at
+                  ## hour 24 under DMSO
+                  State:isHour6 + State:isHour24 + 
+                  
+                  # Initial (day 1) response at hour 6/24 under drug x
+                  # Main monotherapy effects and synergy
+                  AfatTreated:isHour6 + RiboTreated:isHour6 +
+                  CombTreated:isHour6 + 
+                  AfatTreated:isHour24 + RiboTreated:isHour24 + 
+                  CombTreated:isHour24  + 
+                  
+                  # Resistant cell deviation in initial (day 1) response at
+                  ## hour 24 under drug x
+                  # Main monotherapy effects and synergy
+                  State:AfatTreated:isHour6 + State:RiboTreated:isHour6 + 
+                  State:CombTreated:isHour6 +
+                  
+                  State:AfatTreated:isHour24 + State:RiboTreated:isHour24 + 
+                  State:CombTreated:isHour24  + 
+                  
+                  # Plasticity of response at hour 6/24 during DMSO treatment
+                  s(plastHour6, k = 3, bs = "ts") + 
+                  s(plastHour24, k = 3, bs = "ts") +  
+                  # Resistant cell deviation in plasticity of response at 
+                  ## hour 6/24 during DMSO treatment
+                  s(RiboRplastHour6, k = 3, bs = "ts") +
+                  s(RiboRplastHour24, k = 3, bs = "ts") +
+                  
+                  # Plasticity of response at hour 6/24 during drug x treatment 
+                  # Main monotherapy effects
+                  s(plastHour.AfatTreated6, k = 3, bs = "ts") +
+                  s(plastHour.AfatTreated24, k = 3, bs = "ts") +
+                  s(plastHour.RiboTreated6, k = 3, bs = "ts") +
+                  s(plastHour.RiboTreated24, k = 3, bs = "ts") +
+                  
+                  # Synergy combination effects
+                  s(plastHour.CombTreated6, k = 3, bs = "ts") +
+                  s(plastHour.CombTreated24, k = 3, bs = "ts") +
+                  
+                  # Resistant cell deviation in plasticity of response at 
+                  ## hour 6/24 during DMSO treatment
+                  # Main monotherapy effects
+                  s(RiboRplastHour.AfatTreated6, k = 3, bs = "ts") +
+                  s(RiboRplastHour.AfatTreated24, k = 3, bs = "ts") +
+                  s(RiboRplastHour.RiboTreated6, k = 3, bs = "ts") +
+                  s(RiboRplastHour.RiboTreated24, k = 3, bs = "ts") +
+                  
+                  # Synergy combination effects
+                  s(RiboRplastHour.CombTreated6, k = 3, bs = "ts") +
+                  s(RiboRplastHour.CombTreated24, k = 3, bs = "ts")
+                  , data=fit.tmp, method="REML")
+     
+     #Make predictions using GAM (and get residual model error)
+     fit.tmp$predFULL <- predict(gam_Full.tmp)
+     fit.tmp$residFULL <- residuals(gam_Full.tmp)
+     fit.tmp$standresids <- residuals(gam_Full.tmp, "scaled.pearson")
+     fit.tmp$uclFULL <- fit.tmp$predFULL + predict(gam_Full.tmp, se=T)$se.fit
+     fit.tmp$lclFULL <- fit.tmp$predFULL- predict(gam_Full.tmp,se=T)$se.fit
+     
+     #Use ES at time (hours) == 0 to normalize
+     fit.tmp <- fit.tmp %>% 
+       group_by(State, Treatment, day) %>% 
+       mutate(Enrichment_ScoreReltimeunderdrug0 = 
+             sum(Enrichment_Score*(timeunderdrug == 0))) %>%
+       ungroup() %>% 
+       mutate(cent = attr(scale(Enrichment_Score), "scaled:center"),
+              scl = attr(scale(Enrichment_Score), "scaled:scale")) %>%
+       select(Gene_Set, Enrichment_Score, Enrichment_ScoreReltimeunderdrug0,
+              predFULL, residFULL,
+              standresids, uclFULL, lclFULL, everything())
+     
+     #Store results
+     gam_Full_short.list[[i]][[j]] <- gam_Full.tmp
+     gam.input_predict.values_Sen.RiboR.paths_short.list[[i]][[j]] <- fit.tmp
+     
+     
+     #GET SMOOTH TABLE MODEL RESUTLS AND CALCULATE EFFECT SIZE 
+     
+     # Get smooth terms from GAM model output
+     Fullsmooths0.tmp <- data.table(Gene_Set = j,
+                                #term = "smooth", 
+                                summary(gam_Full.tmp)$s.table, 
+                                keep.rownames = T)
+     
+     # add row order variable to maintain ordering
+     Fullsmooths0.tmp$smoothid  <- 1:nrow(Fullsmooths0.tmp) 
+     
+     # predict all the smooth terms and match to data to see how they 
+     ## change over time
+     s_terms.tmp <- cbind(fit.tmp,
+                 predict(gam_Full.tmp,
+                         type="terms" )[, Fullsmooths0.tmp$rn])
+     
+     # remove brackets from col names  
+     names(s_terms.tmp) <- gsub("[()]", "", names(s_terms.tmp))  
+     
+     # Get a metric of effect of smooth: For each smooth term assess trend 
+     ## over time: 
+     ## compare initial value with values at later time point
+     ## (excluding unchanged values)
+     s_effects.tmp <- rbindlist( lapply(Fullsmooths0.tmp$rn, function(i){
+       
+       
+       # make temp copy
+       tmp <- data.table(s_terms.tmp); 
+       
+       # remove brackets in colname and name focal col (term X)
+       setnames(tmp, old = gsub("[()]", "", i ) , new= "X")
+       #setnames(tmp, old = gsub("[()]", "", "s(plastHour6)" ) , new= "X")
+       #setnames(tmp, old = gsub("[()]", "", "s(plastHour.ribo24)" ) , new= "X")
+       
+       # get initial value of focal term (X) at hour 0
+       ## if statement confirms all DOHO values are identical
+       if (tmp[Hour == 0]$X[1] == mean(tmp[Hour==0]$X)) {
+         strt.tmp <- tmp[Hour == 0]$X[1]
+         
+         # get mean change in focal term (X) after hour 0
+         end.tmp  <- mean(tmp[Hour != 0][X!= strt.tmp]$X) 
+         
+         data.table(rn= i, effect= end.tmp - strt.tmp)
+       } else {
+         stop("Not all smooth starting points are identical")
+       }
+     }))
+     
+     # merge smooth table and effect metric
+     Fullsmooths.tmp <-  merge(Fullsmooths0.tmp, 
+                               s_effects.tmp, by="rn")[order(smoothid)]
+     
+     Fullsmooths1.list[[i]][[j]] <- Fullsmooths.tmp %>% 
+       as.data.frame() %>% 
+       rename("p.value" = "p-value",
+              "s.covariate" = "rn") %>% 
+       mutate(Treatment = ifelse(str_detect(s.covariate, ".RiboTreated"), "RiboMain",
+                          ifelse(str_detect(s.covariate, ".AfatTreated"), "AfatMain",
+                          ifelse(str_detect(s.covariate, ".CombTreated"), "CombSynergy",
+                            "DMSO"))),
+              Hour = ifelse(str_detect(s.covariate, "24"), 24, 6),
+              #State = ifelse(str_detect(s.covariate, "RiboR"), "RiboR", "Sens"),
+              State = ifelse(str_detect(s.covariate, "RiboR"), "Sens", "RiboR"),
+              #Hourlab = paste0("Hour: ", Hour),
+              #Statelab = paste0("State: ", State)
+              ) %>%
+       mutate_at(vars(c(p.value)), as.numeric) %>% 
+       select(Gene_Set, s.covariate, effect, p.value, everything())
+     
+     #GET PARAMETRIC TABLE RESUTLS
+     
+     Fullparametic0.tmp <- data.table(Gene_Set = j,
+                                summary(gam_Full.tmp)$p.table, 
+                                keep.rownames = T)
+     
+     
+     Fullparametric.list[[i]][[j]] <- Fullparametic0.tmp %>% 
+       as.data.frame() %>% 
+       rename("p.value" = "Pr(>|t|)",
+              "t_value" = "t value",
+              "Std.Error" = "Std. Error",
+              "p.covariate" = "rn") %>% 
+       mutate(Treatment = ifelse(str_detect(p.covariate, ".RiboTreated"), "RiboMain",
+                          ifelse(str_detect(p.covariate, ".AfatTreated"), "AfatMain",
+                          ifelse(str_detect(p.covariate, ".CombTreated"), "CombSynergy",
+                                 "DMSO"))),
+              Day = ifelse(str_detect(p.covariate, "Day6"), 6,
+                    ifelse(str_detect(p.covariate, "Day12"), 12,
+                    ifelse(str_detect(p.covariate, "Day18"), 18, 0))),
+              #State = ifelse(str_detect(p.covariate, "RiboR"), "RiboR", "Sens"),
+              State = ifelse(str_detect(p.covariate, "RiboR"), "Sens", "RiboR"),
+              Timescale = ifelse(str_detect(p.covariate, "CumDay"), "LongTerm", "ShortTerm"),
+              Hour = ifelse(str_detect(p.covariate, "isHour6"), 6, 
+                     ifelse(str_detect(p.covariate, "isHour24"), 24, 0))) %>% 
+       mutate_at(vars(c(p.value)), as.numeric) %>% 
+       select(Gene_Set, p.covariate, Estimate, p.value, everything())
+     
+     
+     }
+}
+
+end.tmp <- Sys.time()
+print(data.input.time.short <- end.tmp - start.tmp)
+
+
+#gam.input_predict.values_Sen.RiboR.paths_short.list[[i]][[j]] %>% 
+#  as.data.frame() %>% 
+#  slice_head(n = 5)
+
+#Fullsmooths1.list[[i]][[j]] %>% 
+#  arrange(p.value)
+
+#Fullparametric.list[[i]][[j]] %>% 
+#  arrange(p.value)
+
+
+#CORRECT FOR FDR
+
+#Smooth terms
+cov.tmp <- Fullsmooths1.list[[i]] %>% 
+  ldply(.id = NULL) %>% 
+  pull(s.covariate) %>% 
+  unique() %>% 
+  as.character()
+#i <- "s(plastHour.ribo24)"
+
+fdr.tmp <- list()
+fullsmooths_short_df <- list()
+
+start.tmp <- Sys.time()
+
+for (i in collection) {
+  print(i)
+  tmp <- Fullsmooths1.list[[i]]
+
+for (k in cov.tmp) {
+  print(k)
+  
+  tmp1 <- tmp %>% 
+    ldply(.id = NULL) %>%
+    filter(s.covariate == k) %>% 
+    mutate(FDR = p.adjust(p.value, method = "BH")) %>% 
+    select(Gene_Set, s.covariate, effect, p.value, FDR, everything())
+  
+  fdr.tmp[[k]] <- tmp1
+  
+  #Transform lists into one dataframe
+  fullsmooths_short_df[[i]] <- ldply(fdr.tmp, .id = NULL)
+  
+  }
+}
+end.tmp <- Sys.time()
+print(fdr.time.short <- end.tmp - start.tmp)
+
+
+#Parametric terms
+cov.tmp <- Fullparametric.list[[i]] %>% 
+  ldply(.id = NULL) %>% 
+  pull(p.covariate) %>% 
+  unique() %>% 
+  as.character()
+#k <- "StateRiboR"
+
+fdr.tmp <- list()
+fullparametric_short_df <- list()
+
+start.tmp <- Sys.time()
+
+for (i in collection) {
+  print(i)
+  tmp <- Fullparametric.list[[i]]
+  
+for (k in cov.tmp) {
+  print(k)
+  
+  fdr.tmp[[k]] <- tmp %>% 
+    ldply(.id = NULL) %>%
+    filter(p.covariate == k) %>% 
+    mutate(FDR = p.adjust(p.value, method = "BH")) %>% 
+    select(Gene_Set, p.covariate, Estimate, p.value, FDR, everything())
+  
+  #Transform lists into one data frame
+  fullparametric_short_df[[i]] <- ldply(fdr.tmp, .id = NULL)
+  
+  }
+}
+
+end.tmp <- Sys.time()
+print(fdr.time.p.short <- end.tmp - start.tmp)
+
+
+#Save all collection
+setwd(dir = paste0(dir, "gam_results/short.term_changes/synergy/",
+                   "res_reference/ssgsea/ts_splines"))
+
+#SAVE SMOOTH TABLES
+#openxlsx::write.xlsx(fullsmooths_short_df, file = paste(batch, c.line,
+#                                                  "H.C2.C5.C6",
+#                                                  "gam_short.term",
+#                                                  "smooths_table_synergy.xlsx", 
+#                                                   sep = "_"))
+#save txt version
+tmp <- ldply(fullsmooths_short_df) %>% 
+  rename("collection" = ".id")
+
+fwrite(tmp, file = paste(batch, c.line, "H.C2.C5.C6_gam_short.term",
+                         "smooths_table_synergy.txt", sep = "_"),
+       sep = "\t", row.names = F, col.names = T, quote = F)
+
+
+
+#SAVE PARAMETRIC TABLES
+#openxlsx::write.xlsx(fullparametric_short_df, file = paste(batch, c.line,
+#                                                  "H.C2.C5.C6", 
+#                                                  "gam_short.term",
+#                                                  "parametric_table_synergy.xlsx", 
+#                                                   sep = "_"))
+
+#save txt version
+tmp <- ldply(fullparametric_short_df) %>% 
+  rename("collection" = ".id")
+
+fwrite(tmp, file = paste(batch, c.line, "H.C2.C5.C6_gam_short.term",
+                         "parametric_table_synergy.txt", sep = "_"),
+       sep = "\t", row.names = F, col.names = T, quote = F)
+
+
+#Merge gene set data in each collection
+input1.tmp <- list()
+for (i in collection) {
+  print(i)
+  input.tmp <- gam.input_predict.values_Sen.RiboR.paths_short.list[[i]]
+  input1.tmp[[i]] <- ldply(input.tmp, .id = NULL)
+}
+
+#Save input data
+#openxlsx::write.xlsx(input1.tmp,
+#                     file = paste(batch, c.line, "H.C2.C5.C6_gam_short.term",
+#                                  "inputData_synergy.xlsx", 
+#                                                   sep = "_"))
+
+#save txt version
+tmp <- ldply(input1.tmp) %>% 
+  rename("database" = ".id")
+
+fwrite(tmp, file = paste(batch, c.line, "H.C2.C5.C6_gam_short.term",
+                                  "inputData_synergy.txt", 
+                                                   sep = "_"),
+       sep = "\t", row.names = F, col.names = T, quote = F)
+
+
+end.all.tmp <- Sys.time()
+print(whole.script.time <- end.all.tmp - start.all.tmp)
+```
