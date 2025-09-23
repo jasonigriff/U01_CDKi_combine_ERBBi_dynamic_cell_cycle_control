@@ -1,12 +1,12 @@
 # U01_CDKi_combine_ERBBi_dynamic_cell_cycle_control
 ## Introduction
-This repository contains code accompanying the study entitled: "Combination CDK4/6 and ErbB inhibition induces cell cycle arrest and apoptosis in ribociclib-resistant estrogen receptor-positive (ER+) breast cancer". 
+This repository contains code accompanying the study entitled: "Time-resolved transcriptomic modeling reveals ErbB-targeted therapy added to CDK4/6 inhibition blocks resistance and sustains growth control in ER+ breast cancer". 
 
 It provides code used to:
 
 * preprocess raw RNA sequencing data.
 * calculate pathway activity using gene set enrighment.
-* analyze  dynamic transcriptional RNA sequencing changes of CDK4/6 inhibitor-resistant and -sensitive ER+ breast cell cell lines during individual or combined treatment with CDK4/6i (ribociclib) or ERBBi (afatinib). 
+* analyze dynamic transcriptional RNA sequencing changes of CDK4/6 inhibitor-resistant and -sensitive ER+ breast cell cell lines during individual or combined treatment with CDK4/6i (ribociclib) or ERBBi (afatinib). 
 * quantify the trajectories of cancer spheroid growth across treatments and assess synergistice combination treatment effects on cancer growth.
 
 
@@ -18,7 +18,7 @@ Griffiths, J. I., Cosgrove, P. A., Medina, E. F., Nath, A., Chen, J., Adler, F. 
 
 
 ## Environment set up
-The following software is required:
+The following software is required for data analysis:
 
 *R version 1.9.0 or later with core packages:
   * GSVA (version 1.48.3)
@@ -44,9 +44,7 @@ CDK4/6i-resistant estrogen receptor-positive (ER+) breast cancer cell lines were
 ## RNA sequencing and processing
 Cell-line- and treatment-specific dynamic RNA sequencing datasets were generated using temporal bulk RNA sequencing (180 samples). Libraries were prepared (Illumina TruSeq Stranded mRNA kit) and sequenced (NovaSeq 6000) and then aligned, using Kallisto for fast, memory-efficient pseudoalignment of Fastq reads to the Gencode v43 transcriptome (GRCh38). Raw counts were merged into a matrix for filtering and normalization. Fastq files for MCF-7 and CAMA-1 were processed separately.
 
-..... ERIC ..... I can edit now
-Describe raw data processing: name of script
-.....      .....
+Raw data processing is performed by scripts 01_sh10050_MCF7_libraryNormalization.Rmd and 01_sh11141_CAMA1_libraryNormalization.Rmd. These files clean and merge transcript counts, aligns them with metadata, perform filtering and normalization with edgeR, generate QC plots, and output structured datasets for statistical modeling of RNA-seq experiments in MCF7 and CAMA1 cells respectively.
 
 ## Data availablity
 Gene expresion count matrices are available through Gene Expression Omnibus under accession code GSE284956.
@@ -61,9 +59,7 @@ Processed expresion data (CPM) including metadata columns (treatment, timepoint,
 
 
 ## Pathway activity score calculation
-..... ERIC .....
-Describe generation of pathway data from GEO input data: name of script
-.....      .....
+Generation of ssGSEA pathway data from GEO input data was perfomred by scripts 02_sh10050_CAMA1_ssGSEA.Rmd and 02_sh10050_MCF7_ssGSEA.Rmd. These script run ssGSEA on CAMA-1 and MCF7 RNA-seq data using MSigDB gene sets (H, C2, C5, C6), cleans and restructures the results with experimental metadata, and saves them for statistical testing.
 
 Processed temporal pathway activity data, required to model phenotypic change during combination CDK4/6i+ERBBi, are provided as source data files: 
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_inputData_synergy.xlsx"
@@ -73,12 +69,7 @@ Processed temporal pathway activity data, required to model phenotypic change du
 ## Generalized additive model (GAM) of dynamic phenotype change during treatment
 Dynamic changes in pathway activity during treatment were characterized in CDK4/6i-sensitive and -resistant cells using generalized additive models (GAM). Models integrated RNA data from across ribociclib-resistant and -sensitive cell states, over time and across individual and combined treatments. Temporal patterns of pathway activity were partitionaed into four components: i) pre-treatment differences between CDK4/6i-resistant and -sensitive cells, ii) initial response to treatment upon drug addition, iii) pathway reactivation/deactivation during treatment, and iv) plasticity in treatment response upon subsequent drug additions. Treatment effects of monotherapies were additively combined, yielding an additive expectation of the combination treatment effect. Deviation from the additive expectation quantified synergistic or antagonistic effects of combination therapy.
 
-..... ERIC .....
-
-file to run gam on all pathways
-
-An example rmarkdown document within this repository shows how the GAM model can be applied (using processed temporal pathway activity data) to generate cell-line-specific results (components i-iv) for a representative pathway. See file the html version in this repository (name of file)
-.....      .....
+The scripts 04_sh10050_MCF7_ssGSEA_gamModel.Rmd and 04_sh10050_MCF7_ssGSEA_gamModel.Rmd and 04_sh11141_CAMA1_ssGSEA_gamModel.Rmd were used to fit GAM-based synergy models to ssGSEA time-series data in MCF7 and CAMA1 cells, quantifying short-term and cumulative drug effects (Afatinib, Ribociclib, Combo) on pathway activity. This systematically extracts effect sizes, adjusts for multiple testing, and saves structured outputs for downstream interpretation. An example rmarkdown document within this repository shows how the GAM model can be applied (using processed temporal pathway activity data) to generate cell-line-specific results (components i-iv) for a representative pathway. See file the html version in this repository (name of file)
 
 For each pathway, statistical summaries of the significance of fitted GAM model parametric terms (components i-iii) and treatment synergy effects were generated for each cell line and provided as source data files:    
 "sh10050_MCF7_H.C2.C5.C6_gam_short.term_parametric_table_synergy.xlsx"
