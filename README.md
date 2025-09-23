@@ -36,7 +36,7 @@ The following software is required for data analysis:
   * ggsci (version 3.0.0)
   * scales (version 1.3.0)
   * colorspace (version 2.1.0)
-
+  * metap (version 1.12)
 
 ## Experiment data generation summary
 CDK4/6i-resistant estrogen receptor-positive (ER+) breast cancer cell lines were established through experimental evolution, by culturing parental CAMA-1 and MCF-7 cell lines under CDK4/6 inhibition (ribociclib) treatment for 6 and 12 months, respectively. Three-dimensional spheroid cultured CAMA-1 and MCF-7 CDK4/6i-sensitive and -resistant cell lines were treated with DMSO (control), ribociclib, afatinib (ERBBi), or a combination of ribociclib and afatinib for 21 days with media and drug replacement every 3 days (Figure 1A). Cancer cell abundance was monitoring every 3 days during treatments and viability (ATP) measured post treatment. Cells were harvested for bulk RNA-seq every 6 days at 0, 6, and 24 hours following media and drug replacement. This provided transcriptomic time courses for cell lines across treatments to uncover the molecular differences between CDK4/6i-sensitive and -resistant cancer cells that were acquired during experimental evolution and their differing phenotypic responses to therapy at short (hours after adding or refreshing drug) and long (days under treatment) timescales. 
