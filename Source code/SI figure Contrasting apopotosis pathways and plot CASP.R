@@ -62,7 +62,7 @@ apopGSmeta$gs_description%>%unique()
 apopGSmeta[gs_name=="BIOCARTA_DEATH_PATHWAY"]$gene_symbol
 apopGSmeta[gs_name=="REACTOME_APOPTOSIS"]$gene_symbol
 
-presabsMatdd<- unique(apopGSmeta%>%
+presabsMatdd <- unique(apopGSmeta%>%
          dplyr::select(gs_name,gene_symbol))%>%
   mutate(present=1)%>%
   tidyr::spread(gs_name,present,fill=0)

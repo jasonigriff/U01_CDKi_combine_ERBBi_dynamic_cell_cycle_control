@@ -804,7 +804,10 @@ ggplot( ccoutsyn,
   theme(aspect.ratio=3)+
   geom_tile()+ 
   scale_fill_gradient2(name="Synergistic \n effect",low="blue", high="darkred", mid="white",midpoint=0)+
-  scale_x_discrete(name="", labels=c("CAMA-1 \n Sensitive","CAMA-1 \n Resistant","MCF-7 \n Sensitive",  "MCF-7 \n Resistant"))
+  scale_x_discrete(name="", labels=c("CAMA-1 \n Sensitive","CAMA-1 \n Resistant","MCF-7 \n Sensitive",  "MCF-7 \n Resistant"))+
+  theme( axis.text = element_text(color="black"), axis.ticks = element_line(color = "black"))
+
+
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellCycleGeneSpecificTreatmentSynergyByEndPerCellLineSI.pdf", dpi=320, height=12, width=6)
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellCycleGeneSpecificTreatmentSynergyByEndPerCellLineSI.png", dpi=320, height=12, width=6)
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellCycleGeneSpecificTreatmentSynergyByEndPerCellLineSI.tiff", dpi=320, height=12, width=6)
@@ -896,13 +899,15 @@ ap_resout2 <- outsyn%>%mutate(Effect="SynegryByEndpoint", Process="CellDeath")
 #write.csv(cc_resout2)
 
 #Visualize cell line specific response (obtained from LME model)
-ggplot( outsyn,
+ggplot( outsyn[pvalue<0.05],
         aes(y= Gene, x= Lineage, fill=Estimate))+
   theme_classic(base_size=12)+
   theme(aspect.ratio=3)+
   geom_tile()+ 
   scale_fill_gradient2(name="Synergistic \n effect",low="blue", high="darkred", mid="white",midpoint=0)+
-  scale_x_discrete(name="", labels=c("CAMA-1 \n Sensitive","CAMA-1 \n Resistant","MCF-7 \n Sensitive",  "MCF-7 \n Resistant"))
+  scale_x_discrete(name="", labels=c("CAMA-1 \n Sensitive","CAMA-1 \n Resistant","MCF-7 \n Sensitive",  "MCF-7 \n Resistant"))+
+  theme( axis.text = element_text(color="black"), axis.ticks = element_line(color = "black"))
+
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellDeathGeneSpecificTreatmentSynergyByEndPerCellLineSI.pdf", dpi=320, height=12, width=6)
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellDeathGeneSpecificTreatmentSynergyByEndPerCellLineSI.png", dpi=320, height=12, width=6)
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/CellDeathGeneSpecificTreatmentSynergyByEndPerCellLineSI.tiff", dpi=320, height=12, width=6)

@@ -16,7 +16,7 @@ setwd(fileloc)
 dd0mcf <-read.csv(file = "sh10050_MCF7_H.C2.C5.C6_gam_short.term_inputData_synergy.csv")
 dd0cama<-read.csv(file = "sh11141_CAMA1_H.C2.C5.C6_gam_short.term_inputData_synergy.csv")
 
-dd0 <- data.table(rbind(dd0cama%>%dplyr::select( intersect(names(dd0cama),names(dd0mcf)) ),
+dd0  <- data.table(rbind(dd0cama%>%dplyr::select( intersect(names(dd0cama),names(dd0mcf)) ),
                         dd0mcf%>%dplyr::select( intersect(names(dd0cama),names(dd0mcf)) )))
 
 dd0[,Lineage:=paste0(CellLine," ",State)]
@@ -205,8 +205,10 @@ ggplot(dd0lu[Treatment!="DMSO"],#[Gene_Set=="HALLMARK_APOPTOSIS"],
   theme(aspect.ratio=1)+#labs(title=gsub("_"," ",x), x="Hour")+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "bottom")+
   scale_y_discrete(guide=guide_axis(n.dodge=1)) +
-  labs(x="Time (hours)",y="Pathway")
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/ApoptosisGeneSetsOverTimeGAMordered.png", width=20, height=8, dpi=320)
+  labs(x="Time (hours)",y="Pathway")+
+  theme( axis.text = element_text(color="black"), axis.ticks = element_line(color = "black"))
+
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/ApoptosisGeneSetsOverTimeGAMordered.png", width=20, height=8, dpi=320)
 
 
 

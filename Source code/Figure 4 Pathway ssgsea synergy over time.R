@@ -164,9 +164,12 @@ ggplot(twotypes%>%group_by(Gene_SetLab,CellLine,State)%>%dplyr::summarise(ActEst
   theme(aspect.ratio=2.5)+
   labs(y="Synergistic effect on pathway", x="Gene set")+
   scale_color_manual(name="Resistance", values=c("blue","red"),labels=c("Sensitive", "Resistant"))+#,values=cols[-1])+
-  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))
+  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))+ 
+  theme(text = element_text(colour = "black"),
+        axis.text = element_text(colour = "black" ))
 
-#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Synergy effect R vs Sv2.png", width=16, height=16, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Synergy effect R vs Sv3.png", width=16, height=16, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Synergy effect R vs Sv3.pdf", width=16, height=16, dpi=320)
 
 
 ggplot(twotypes%>%
@@ -180,9 +183,12 @@ ggplot(twotypes%>%
   theme(aspect.ratio=2.5)+
   labs(y="Synergistic effect on pathway", x="Gene set")+
   scale_color_manual(name="Resistance", values=c("blue","red"),labels=c("Sensitive", "Resistant"))+#,values=cols[-1])+
-  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))
+  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))+
+  theme(text = element_text(colour = "black"),
+        axis.text = element_text(colour = "black" ))
 
-#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Synergy effect accumulation over time R vs Sv2.png", width=20, height=20, dpi=320)
+
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Synergy effect accumulation over time R vs Sv3.png", width=20, height=20, dpi=320)
 #write.csv( twotypes, file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/ SItable I Fig4a Combination synergy effects over time in R and S CAMA1 and MCF7.csv")
 
 subsetGSplt<-c("HALLMARK E2F TARGETS","HALLMARK G2M CHECKPOINT","HALLMARK MITOTIC SPINDLE","HALLMARK MYC V1","HALLMARK MYC V2",#"BIOCARTA MPR PATHWAY","BIOCARTA EFP PATHWAY",
@@ -259,28 +265,28 @@ summary( lm(ActEst~-1+DayLab,   data= dynamSyn[Gene_SetLab=="HALLMARK E2F TARGET
 summary( lm(ActEst~-1+DayLab,   data= dynamSyn[Gene_SetLab=="HALLMARK G2M CHECKPOINT"]) )
 
 
-Biocarta death pathway:: 
-Day=0-6:Est=-0.10,sd=0.21, t=-0.46,p=0.66,   
-Day=6-12:Est=1.07,sd=0.21,t=5.01,p=0.0007,  
-Day=12-18:Est=0.92,sd=0.21,t=4.30,p=0.002 
-
-Biocarta mitochondria pathway:: 
-Day=0-6:Est=0.11,sd=0.17, t=0.64,p=0.54,   
-Day=6-12:Est=0.38,sd=0.17,t=2.17,p=0.058,  
-Day=12-18:Est=1.05,sd=0.17,t=6.03,p=0.0002 
-
-
-Hallmark E2F targets:: 
-Day=0-6:Est=-0.59,sd=0.22, t=-2.72,p=0.02,   
-Day=6-12:Est=-0.89,sd=0.22,t=-4.06,p=0.002,  
-Day=12-18:Est=-0.22,sd=0.22,t=-0.99,p=0.35 
-
-Biocarta G2M checkpoint:: 
-Day=0-6:Est=-0.61,sd=0.22, t=-2,80,p=0.02,   
-Day=6-12:Est=-0.87,sd=0.22,t=-3.99,p=0.003,  
-Day=12-18:Est=-0.23,sd=0.22,t=-1.06,p=0.32 
-
-
+# Biocarta death pathway:: 
+# Day=0-6:Est=-0.10,sd=0.21, t=-0.46,p=0.66,   
+# Day=6-12:Est=1.07,sd=0.21,t=5.01,p=0.0007,  
+# Day=12-18:Est=0.92,sd=0.21,t=4.30,p=0.002 
+# 
+# Biocarta mitochondria pathway:: 
+# Day=0-6:Est=0.11,sd=0.17, t=0.64,p=0.54,   
+# Day=6-12:Est=0.38,sd=0.17,t=2.17,p=0.058,  
+# Day=12-18:Est=1.05,sd=0.17,t=6.03,p=0.0002 
+# 
+# 
+# Hallmark E2F targets:: 
+# Day=0-6:Est=-0.59,sd=0.22, t=-2.72,p=0.02,   
+# Day=6-12:Est=-0.89,sd=0.22,t=-4.06,p=0.002,  
+# Day=12-18:Est=-0.22,sd=0.22,t=-0.99,p=0.35 
+# 
+# Biocarta G2M checkpoint:: 
+# Day=0-6:Est=-0.61,sd=0.22, t=-2,80,p=0.02,   
+# Day=6-12:Est=-0.87,sd=0.22,t=-3.99,p=0.003,  
+# Day=12-18:Est=-0.23,sd=0.22,t=-1.06,p=0.32 
+# 
+# 
 
 
 
@@ -602,10 +608,10 @@ lu2<-rbind( data.table(Treatment="RiboMain",Direction= "Increase", Gene_Set=comm
 lu2finalized<- data.table(lu2)
 lu2finalized$Treatment<- gsub("Main","",lu2finalized$Treatment)
 saveloc<- "/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/Cancer_pheno_evo/data/Lab U01/SynergyPlasticitySSGSEArewiring/"
-write.csv(lu2finalized, file=paste0(saveloc,"H.C2.C5.C6 plasticity rewiring by treatment.csv" ))
+#write.csv(lu2finalized, file=paste0(saveloc,"H.C2.C5.C6 plasticity rewiring by treatment.csv" ))
 
 Res1finalized <-  dd0Res[Treatment!="DMSO"][Gene_Set%in%lu2finalized$Gene_Set][Hour==24]#[p.value <0.05][State=="Sens"]
-write.csv(Res1finalized, file=paste0(saveloc,"H.C2.C5.C6Results plasticity rewiring by treatment.csv" ))
+#write.csv(Res1finalized, file=paste0(saveloc,"H.C2.C5.C6Results plasticity rewiring by treatment.csv" ))
 Res1finalized[p.value <0.05][State=="Sens"][order(Treatment,-effect)]
 
 plotThis<- data.table( Res1finalized)
@@ -633,7 +639,7 @@ ggplot(plotThis[] , aes(y=effect, x=Gene_SetLab, col=TreatmentLab, group=interac
   scale_color_manual(name="Treatment",values=cols[-1])+
   scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF7"))
 
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Rewiring effect of R vs S under drug.png", width=16, height=16, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Rewiring effect of R vs S under drug.png", width=16, height=16, dpi=320)
 
 ggplot(plotThis[grep("HALLMARK",Gene_Set)] , aes(y=effect, x=Gene_SetLab, col=TreatmentLab, group=interaction(Gene_SetLab,CellLine)))+geom_point(aes(shape=CellLine),position=position_dodge(width=0.5),size=3)+coord_flip()+
   theme_classic(base_size=26)+
@@ -641,7 +647,7 @@ ggplot(plotThis[grep("HALLMARK",Gene_Set)] , aes(y=effect, x=Gene_SetLab, col=Tr
   scale_color_manual(name="Treatment",values=cols[-1])+
   scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF7"))
 
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Rewiring effect of R vs S under drug HALLMARK.png", width=15, height=14, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Fig3 Rewiring effect of R vs S under drug HALLMARK.png", width=15, height=14, dpi=320)
 
 
 # load timecourse rnaseq data
@@ -730,7 +736,7 @@ ggplot(egdatTx0[Lineage%in% c("CAMA1 RiboR")],
   scale_fill_discrete(name="Treatment",labels=c("DMSO","Afatinib","Ribociclib","Combination") )+
   scale_x_continuous(breaks=c(0,6,12,18))+
   scale_alpha( range = c(0.4, 1),guide = "none")
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic tx effects.png", width=8, height=8, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic tx effects.png", width=8, height=8, dpi=320)
 
 
 egdatTx <- dd0lu[] [ Gene_Set%in%c( "HALLMARK_E2F_TARGETS" )][Lineage%in% c("CAMA1 RiboR","CAMA1 Sen" ) ]
@@ -768,7 +774,7 @@ ggplot(egdat,
   scale_x_continuous(breaks=c(0,6,12,18))+
   scale_alpha( range = c(0.4, 1),guide = "none")
 
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data.png", width=8, height=8, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data.png", width=8, height=8, dpi=320)
 
 ggplot(egdat[Hour==0],
        aes(x=State, y=NormSensExpression.SSGSEA, fill=State,col= State, group=interaction(State) ))+
@@ -824,7 +830,7 @@ ggplot(egdat[Hour<=24],
   theme(aspect.ratio=1)+labs(title= "    Baseline difference & \n Initial tx response (Day 0)", y="Pathway activity", x="Hour")+
   scale_x_continuous(breaks=c(0,6,12,18,24))+
   scale_alpha( range = c(0.4, 1),guide = "none")+theme(legend.position="none")
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P1.png", width=7, height=7, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P1.png", width=7, height=7, dpi=320)
 
 inpt2<- egdat[timeunderdrug==0]
 inpt2[ ,lagy:=lag(NormSensExpression.SSGSEA), by=State]
@@ -848,7 +854,7 @@ ggplot(inpt2,
   theme(aspect.ratio=1)+labs(title="Long-term trend \n     (Day 0-18)", y="Pathway activity", x="Day")+
   scale_x_continuous(breaks=c(0,6,12,18))+
   scale_alpha( range = c(0.4, 1),guide = "none")+theme(legend.position="none")
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P2.png", width=7, height=7, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P2.png", width=7, height=7, dpi=320)
 
 
 
@@ -893,7 +899,7 @@ ggplot(egdat3[timeunderdrug==24],
   theme(aspect.ratio=1)+labs(title="Plasticity of tx responses \n           (Day 0-18)", y="Tx response (activation/day)", x="Day")+
   scale_x_continuous(breaks=c(0,6,12,18,24))+
   scale_alpha( range = c(0.4, 1),guide = "none")+theme(legend.position="none")
-ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P3.png", width=7, height=7, dpi=320)
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/Schematic input data P3.png", width=7, height=7, dpi=320)
 
 
 dd0lu[,Treatmentlab:="Combination"]

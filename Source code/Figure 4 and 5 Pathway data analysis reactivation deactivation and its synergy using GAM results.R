@@ -113,13 +113,16 @@ gg_color_hue <- function(n) {
 cols = gg_color_hue(4)
 pl1dd<-plotthis#[Gene_SetLab%in%whcplot] 
 ggplot( pl1dd , aes(y=(Gene_SetLab),x=reactiv,col=Treatment,shape=CellLineLab, group=interaction(Gene_SetLab,CellLine)))+
-  theme_classic(base_size=6)+theme(aspect.ratio=2)+
+  theme_classic(base_size=26)+theme(aspect.ratio=2)+
   geom_vline(xintercept=0, linetype="dashed")+
   geom_point(position=position_dodge(width=0.5),size=3)+facet_grid(.~ReferenceState)+
   labs(y="Gene set", x="Reactivation/deactivation \n (-ve=turning off, +ve=turning on)") +
-  scale_color_manual(name="Treatment",values=cols[-1])+# , labels=c("Ribociclib","Afatinib","Combination"))
-  scale_fill_manual(name="Treatment",values=cols[-1])+
-  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))
+  scale_color_manual(name="Treatment \n effect",labels= c("Ribociclib","Afatinib","Synergy"),values=cols[-1])+# , labels=c("Ribociclib","Afatinib","Combination"))
+  scale_fill_manual(name="Treatment \n effect",labels= c("Ribociclib","Afatinib","Synergy"),values=cols[-1])+
+  scale_shape_discrete(name="Cell line", labels=c("CAMA-1", "MCF-7"))+
+  theme( axis.text = element_text(color="black"), axis.ticks = element_line(color = "black"))
+
+#ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Fig3/FigS8a Reactiv or deactiv drug effect on R and S.png", width=22.5, height=18.5, dpi=320)
 
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Long term rewiring/Fig4 Rewiring effect of R and S under drug.png", width=22, height=18, dpi=320)
 #ggsave(file="/Users/jgriffiths/Jason Griffiths Dropbox/jason griffiths/R Analysis/ComboRiboAfatinib/Long term rewiring/Fig4 Rewiring effect of R and S under drug.pdf", width=22, height=18, dpi=320)
