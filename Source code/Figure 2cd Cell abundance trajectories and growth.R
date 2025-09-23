@@ -146,7 +146,7 @@ gam5 <- gam(log10(NormCellNumber)~ -1+CellLine_typeLab+
   
 
 # model comparison
-AIC(gam1,gam2,gam3,gam4,gam5,gam6)         
+AIC(gam1,gam2,gam3,gam4,gam5)         
 
 # model statistical summaries
 summary(gam3);
